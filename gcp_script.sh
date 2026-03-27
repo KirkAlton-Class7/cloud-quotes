@@ -2,7 +2,6 @@
 
 APP_USER="kirk_cochran_cloud"
 
-
 exec > /var/log/startup-script.log 2>&1
 set -x
 
@@ -66,6 +65,11 @@ wait_for_apt() {
 }
 
 # -------------------------------
+# File System Initialization
+# -------------------------------
+mkdir -p /opt
+
+# -------------------------------
 # Install packages
 # -------------------------------
 wait_for_apt
@@ -81,8 +85,6 @@ retry apt-get install -y \
   git \
   build-essential
 
-mkdir -p "${APP_DIR}" "${DATA_DIR}"
-
 # -------------------------------
 # Install Node.js
 # -------------------------------
@@ -91,6 +93,28 @@ if ! command -v node >/dev/null; then
   retry curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt-get install -y nodejs
 fi
+
+# -------------------------------
+# Application Directory Setup
+# -------------------------------
+mkdir -p "${APP_DIR}" "${DATA_DIR}"
+
+# --------------------------------
+# Clone Repo
+# --------------------------------
+log "Cloning dashboard repo"
+
+REPO_URL="https://github.com/KirkAlton-Class7/cloud-quotes.git"
+REPO_DIR="/opt/cloud-quotes"
+
+if [ ! -d "$REPO_DIR" ]; then
+  retry git clone "$REPO_URL" "$REPO_DIR"
+fi
+
+cd "$REPO_DIR" && git pull
+
+# CRITICAL: fix ownership immediately after clone/pull
+chown -R ${APP_USER}:${APP_USER} "$REPO_DIR"
 
 # -------------------------------
 # Quotes (local fallback + cache)
@@ -201,64 +225,6 @@ log "Setting up cron job to refresh quotes"
 CRON_CMD="*/10 * * * * curl -fsSL ${GITHUB_QUOTES_URL} -o ${DATA_DIR}/quotes.json.tmp && mv ${DATA_DIR}/quotes.json.tmp ${DATA_DIR}/quotes.json && cp ${DATA_DIR}/quotes.json ${DATA_DIR}/quotes_local.json >> /var/log/quotes-cron.log 2>&1 # cloud-quotes-sync"
 
 (crontab -l 2>/dev/null | grep -v 'cloud-quotes-sync'; echo "$CRON_CMD") | crontab -
-
-# -------------------------------
-# Auto-deploy Dashboard Updates
-# -------------------------------
-log "Setting up dashboard auto-deploy"
-
-DEPLOY_CMD="*/15 * * * * bash -c '
-LOCK_FILE=/tmp/dashboard.lock
-
-if [ -f \$LOCK_FILE ]; then
-  exit 0
-fi
-
-touch \$LOCK_FILE
-trap \"rm -f \$LOCK_FILE\" EXIT
-
-echo \"[DEPLOY] Checking for updates...\"
-
-cd /opt/cloud-quotes/dashboard || exit 1
-
-# Ensure ownership before deploy
-chown -R ${APP_USER}:${APP_USER} /opt/cloud-quotes
-
-LOCAL=\$(git rev-parse HEAD)
-REMOTE=\$(git rev-parse origin/main)
-
-if [ \"\$LOCAL\" != \"\$REMOTE\" ]; then
-  echo \"[DEPLOY] Changes detected, deploying...\"
-
-  git pull || exit 1
-
-  # Run install + build as app user
-  sudo -u ${APP_USER} bash <<EOF
-cd /opt/cloud-quotes/dashboard
-
-if ! npm ci; then
-  npm install || exit 1
-fi
-
-npm run build || exit 1
-EOF
-
-  if [ ! -d "dist" ]; then
-    echo "[DEPLOY] dist missing — skipping deploy"
-    exit 0
-  fi
-
-  # Atomic deploy
-  rm -rf ${APP_DIR}/*
-  cp -r dist/* ${APP_DIR}/
-
-  echo \"[DEPLOY] Deployment complete\"
-else
-  echo \"[DEPLOY] No changes\"
-fi
-' >> /var/log/dashboard-deploy.log 2>&1 # dashboard-auto-deploy"
-
-(crontab -l 2>/dev/null | grep -v 'dashboard-auto-deploy'; echo "$DEPLOY_CMD") | crontab -
 
 # -------------------------------
 # Metadata
@@ -399,32 +365,7 @@ with open("/var/www/devsecops-sandbox/data/dashboard-data.json","w") as f:
 PY
 
 # -------------------------------
-# Ensure /opt permissions
-# -------------------------------
-mkdir -p /opt
-
-# Only fix repo path (NOT entire /opt)
-chown -R ${APP_USER}:${APP_USER} /opt/cloud-quotes 2>/dev/null || true
-
-# --------------------------------
-# Clone Repo
-# --------------------------------
-log "Cloning dashboard repo"
-
-REPO_URL="https://github.com/KirkAlton-Class7/cloud-quotes.git"
-REPO_DIR="/opt/cloud-quotes"
-
-if [ ! -d "$REPO_DIR" ]; then
-  retry git clone "$REPO_URL" "$REPO_DIR"
-fi
-
-cd "$REPO_DIR" && git pull
-
-# CRITICAL: fix ownership immediately after clone/pull
-chown -R ${APP_USER}:${APP_USER} "$REPO_DIR"
-
-# -------------------------------
-# Build and Deploy Dashboard
+# Build Dashboard
 # -------------------------------
 log "Building dashboard"
 
@@ -448,16 +389,19 @@ fi
 npm run build || exit 1
 EOF
 
-# Deploy to nginx directory
-log "Deploying dashboard"
-
-if [ ! -d "dist" ]; then
-  log "ERROR: dist directory missing"
+# VALIDATE IMMEDIATELY AFTER BUILD
+if [ ! -d "$REPO_DIR/dashboard/dist" ]; then
+  log "ERROR: dist not created — aborting startup"
   exit 1
 fi
 
+# -------------------------------
+# Deploy Dashboard
+# -------------------------------
+log "Deploying dashboard"
+
 rm -rf ${APP_DIR}/*
-cp -r dist/* ${APP_DIR}/
+cp -r "$REPO_DIR/dashboard/dist/"* ${APP_DIR}/
 
 # -------------------------------
 # Ensure index.html exists (safety)
@@ -529,3 +473,57 @@ if ! curl -f http://127.0.0.1 >/dev/null; then
 fi
 
 log "Startup complete"
+
+# -------------------------------
+# Auto-deploy Dashboard Updates
+# -------------------------------
+log "Setting up dashboard auto-deploy"
+
+DEPLOY_CMD="*/15 * * * * bash -c '
+LOCK_FILE=/tmp/dashboard.lock
+
+if [ -f \$LOCK_FILE ]; then
+  exit 0
+fi
+
+touch \$LOCK_FILE
+trap \"rm -f \$LOCK_FILE\" EXIT
+
+echo \"[DEPLOY] Checking for updates...\"
+
+cd /opt/cloud-quotes || exit 0
+
+# Ensure ownership ALWAYS
+chown -R ${APP_USER}:${APP_USER} /opt/cloud-quotes
+
+cd dashboard || exit 0
+
+LOCAL=\$(git rev-parse HEAD)
+REMOTE=\$(git rev-parse origin/main)
+
+if [ \"\$LOCAL\" != \"\$REMOTE\" ]; then
+  echo \"[DEPLOY] Changes detected, deploying...\"
+
+  git pull || exit 1
+
+  # Run install + build as app user
+  sudo -u ${APP_USER} bash -c \"cd /opt/cloud-quotes/dashboard && \
+    (npm ci || npm install) && \
+    npm run build\"
+
+  if [ ! -d \"dist\" ]; then
+    echo \"[DEPLOY] dist missing — skipping deploy\"
+    exit 0
+  fi
+
+  # Atomic deploy
+  rm -rf ${APP_DIR}/*
+  cp -r dist/* ${APP_DIR}/
+
+  echo \"[DEPLOY] Deployment complete\"
+else
+  echo \"[DEPLOY] No changes\"
+fi
+' >> /var/log/dashboard-deploy.log 2>&1 # dashboard-auto-deploy"
+
+(crontab -u ${APP_USER} -l 2>/dev/null | grep -v 'dashboard-auto-deploy'; echo "$DEPLOY_CMD") | crontab -u ${APP_USER} -
