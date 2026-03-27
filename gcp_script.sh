@@ -6,7 +6,7 @@ APP_DIR="/var/www/${APP_NAME}"
 NGINX_SITE="/etc/nginx/sites-available/${APP_NAME}"
 DATA_DIR="${APP_DIR}/data"
 
-GITHUB_QUOTES_URL="https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/quotes.json"
+GITHUB_QUOTES_URL="https://raw.githubusercontent.com/KirkAlton-Class7/cloud-quotes/main/quotes.json"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -39,16 +39,84 @@ apt-get install -y nginx python3 curl jq ca-certificates
 mkdir -p "${APP_DIR}" "${DATA_DIR}"
 
 # -------------------------------
-# Quotes (local fallback)
+# Quotes (local fallback + cache)
 # -------------------------------
-LOCAL_QUOTES="${DATA_DIR}/quotes.local.json"
+LOCAL_QUOTES="${DATA_DIR}/quotes_local.json"
 ACTIVE_QUOTES="${DATA_DIR}/quotes.json"
 
+# Local fallback (10 quotes)
 cat > "${LOCAL_QUOTES}" <<'EOF'
 [
-  {"text":"Automation beats repetition","author":"DevSecOps"},
-  {"text":"Logs are evidence, not decoration","author":"DevSecOps"},
-  {"text":"Security is a feature, not a patch","author":"DevSecOps"}
+  {
+    "id": 1,
+    "text": "He who has a why to live for can bear almost any how.",
+    "author": "Friedrich Nietzsche",
+    "source": null,
+    "tags": ["purpose", "resilience"]
+  },
+  {
+    "id": 2,
+    "text": "We all make choices in life, but in the end, our choices make us.",
+    "author": "Andrew Ryan",
+    "source": "BioShock",
+    "tags": ["choices", "identity"]
+  },
+  {
+    "id": 3,
+    "text": "Perfection isn’t possible, but chasing it helps you catch excellence.",
+    "author": "Vince Lombardi",
+    "source": null,
+    "tags": ["excellence", "growth"]
+  },
+  {
+    "id": 4,
+    "text": "You can’t cross the sea by staring at the water.",
+    "author": "Rabindranath Tagore",
+    "source": null,
+    "tags": ["action", "courage"]
+  },
+  {
+    "id": 5,
+    "text": "The greatest loss is what dies inside while still alive.",
+    "author": "Norman Cousins",
+    "source": null,
+    "tags": ["purpose", "regret"]
+  },
+  {
+    "id": 6,
+    "text": "Easy choices, hard life. Hard choices, easy life.",
+    "author": "Jerzy Gregorek",
+    "source": null,
+    "tags": ["discipline", "choices"]
+  },
+  {
+    "id": 7,
+    "text": "We are what we pretend to be, so we must be careful about what we pretend to be.",
+    "author": "Kurt Vonnegut",
+    "source": null,
+    "tags": ["identity", "behavior"]
+  },
+  {
+    "id": 8,
+    "text": "Success is the sum of small efforts repeated every day.",
+    "author": "Robert Collier",
+    "source": null,
+    "tags": ["consistency", "success"]
+  },
+  {
+    "id": 9,
+    "text": "A question opens the mind, a statement closes the mind.",
+    "author": "Unattributed",
+    "source": null,
+    "tags": ["thinking", "curiosity"]
+  },
+  {
+    "id": 10,
+    "text": "Nothing comes from nothing; nothing ever could. Do something!",
+    "author": "Richard Rodgers & Oscar Hammerstein II",
+    "source": "The Sound of Music",
+    "tags": ["action", "motivation"]
+  }
 ]
 EOF
 
@@ -58,13 +126,27 @@ GITHUB_QUOTES_SYNC="Failed"
 if curl -fsSL "${GITHUB_QUOTES_URL}" -o "${ACTIVE_QUOTES}.tmp"; then
   if python3 -c "import json; json.load(open('${ACTIVE_QUOTES}.tmp'))"; then
     mv "${ACTIVE_QUOTES}.tmp" "${ACTIVE_QUOTES}"
+    
+    # Cache last known good version
+    cp "${ACTIVE_QUOTES}" "${LOCAL_QUOTES}"
+    
     GITHUB_QUOTES_SYNC="Successful"
   else
     cp "${LOCAL_QUOTES}" "${ACTIVE_QUOTES}"
   fi
 else
+  # Fallback to cached version
   cp "${LOCAL_QUOTES}" "${ACTIVE_QUOTES}"
 fi
+
+# -------------------------------
+# Cron Job to Refresh Quotes
+# -------------------------------
+log "Setting up cron job to refresh quotes"
+
+CRON_CMD="*/5 * * * * curl -fsSL ${GITHUB_QUOTES_URL} -o ${DATA_DIR}/quotes.json.tmp && mv ${DATA_DIR}/quotes.json.tmp ${DATA_DIR}/quotes.json && cp ${DATA_DIR}/quotes.json ${DATA_DIR}/quotes_local.json >> /var/log/quotes-cron.log 2>&1 # cloud-quotes-sync"
+
+(crontab -l 2>/dev/null | grep -v 'cloud-quotes-sync'; echo "$CRON_CMD") | crontab -
 
 # -------------------------------
 # Metadata
