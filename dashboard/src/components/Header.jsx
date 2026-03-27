@@ -15,9 +15,7 @@ export default function Header({ appName, tagline, uptime }) {
   // Detect cloud provider dynamically
   useEffect(() => {
     async function detectCloudProvider() {
-      // Try to get metadata from the VM (if running on cloud)
       try {
-        // Check for GCP metadata endpoint
         const gcpCheck = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/zone', {
           headers: { 'Metadata-Flavor': 'Google' }
         });
@@ -25,23 +23,17 @@ export default function Header({ appName, tagline, uptime }) {
           setCloudProvider({ name: "Google Cloud", color: "from-emerald-500 to-green-400" });
           return;
         }
-      } catch (e) {
-        // Not GCP
-      }
+      } catch (e) {}
 
       try {
-        // Check for AWS metadata endpoint
         const awsCheck = await fetch('http://169.254.169.254/latest/meta-data/instance-id');
         if (awsCheck.ok) {
           setCloudProvider({ name: "AWS", color: "from-orange-500 to-amber-400" });
           return;
         }
-      } catch (e) {
-        // Not AWS
-      }
+      } catch (e) {}
 
       try {
-        // Check for Azure metadata endpoint
         const azureCheck = await fetch('http://169.254.169.254/metadata/instance?api-version=2017-08-01', {
           headers: { 'Metadata': 'true' }
         });
@@ -49,11 +41,8 @@ export default function Header({ appName, tagline, uptime }) {
           setCloudProvider({ name: "Azure", color: "from-blue-500 to-blue-400" });
           return;
         }
-      } catch (e) {
-        // Not Azure
-      }
+      } catch (e) {}
 
-      // Default fallback - detect from hostname
       const hostname = window.location.hostname;
       if (hostname.includes('google') || hostname.includes('gcp')) {
         setCloudProvider({ name: "Google Cloud", color: "from-emerald-500 to-green-400" });
@@ -81,7 +70,6 @@ export default function Header({ appName, tagline, uptime }) {
     day: 'numeric'
   });
 
-  // Dynamic deployment text based on provider
   const getDeploymentText = () => {
     if (cloudProvider.name === "Google Cloud") return "Google Cloud Deployment";
     if (cloudProvider.name === "AWS") return "AWS Deployment";
@@ -94,7 +82,7 @@ export default function Header({ appName, tagline, uptime }) {
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 100 }}
-      className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl shadow-lg"
+      className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl shadow-lg"
     >
       <div className="relative">
         <motion.div 
@@ -122,7 +110,7 @@ export default function Header({ appName, tagline, uptime }) {
                 {appName}
               </p>
             </div>
-            {/* Dynamic deployment text - text only, no icon */}
+            {/* Dynamic deployment text */}
             <div className="flex items-center gap-2 mt-1">
               <motion.div 
                 className={`px-2 py-0.5 rounded-full bg-gradient-to-r ${cloudProvider.color} bg-opacity-20 backdrop-blur-sm border border-white/10`}
@@ -131,7 +119,7 @@ export default function Header({ appName, tagline, uptime }) {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.3 }}
               >
-                <span className="text-xs font-medium text-slate-300">{getDeploymentText()}</span>
+                <span className="text-xs font-medium text-slate-300 whitespace-nowrap">{getDeploymentText()}</span>
               </motion.div>
             </div>
           </motion.div>
@@ -154,7 +142,7 @@ export default function Header({ appName, tagline, uptime }) {
               <span className="text-xs lg:text-sm text-slate-300 font-mono">{formattedTime}</span>
             </motion.div>
             
-            {/* Uptime - shortened for mobile */}
+            {/* Uptime */}
             <motion.div 
               className="flex items-center gap-2 px-2 py-1 lg:px-3 lg:py-1.5 rounded-full bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30"
               whileHover={{ scale: 1.05 }}

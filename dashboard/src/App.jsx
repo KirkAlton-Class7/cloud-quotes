@@ -86,23 +86,23 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <Sidebar />
 
       <motion.div 
-        className="xl:ml-64"
+        className="lg:ml-64"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
       >
         <Header
-          appName={dashboard.meta?.appName || "DevSecOps Sandbox"}
+          appName={dashboard.meta?.appName || "DevSecOps"}
           tagline={dashboard.meta?.tagline || "Real-time infrastructure monitoring"}
           uptime={dashboard.meta?.uptime || "Unknown"}
         />
 
         <motion.main 
-          className="space-y-8 px-6 py-6"
+          className="space-y-8 px-4 py-4 lg:px-6 lg:py-6"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -110,12 +110,13 @@ export default function App() {
           {/* Stats Cards */}
           <motion.section 
             id="overview" 
-            className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
             variants={itemVariants}
           >
             {dashboard.summaryCards?.map((card, idx) => (
               <motion.div
                 key={card.label}
+                className="h-full"
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: idx * 0.1, type: "spring", stiffness: 200 }}
@@ -132,11 +133,11 @@ export default function App() {
 
           {/* Chart & Quote & Gallery */}
           <motion.section 
-            className="grid grid-cols-1 gap-6 xl:grid-cols-3"
+            className="grid grid-cols-1 gap-6 lg:grid-cols-3"
             variants={itemVariants}
           >
             <motion.div 
-              className="xl:col-span-2"
+              className="lg:col-span-2"
               whileHover={{ scale: 1.01 }}
               transition={{ type: "spring", stiffness: 300 }}
             >
@@ -160,7 +161,7 @@ export default function App() {
 
           {/* Info Sections */}
           <motion.section 
-            className="grid grid-cols-1 gap-6 xl:grid-cols-3"
+            className="grid grid-cols-1 gap-6 lg:grid-cols-3"
             variants={itemVariants}
           >
             <motion.div 
@@ -201,7 +202,7 @@ export default function App() {
           {/* Resource Tables */}
           <motion.section 
             id="resources" 
-            className="grid grid-cols-1 gap-6 xl:grid-cols-2"
+            className="grid grid-cols-1 gap-6 lg:grid-cols-2"
             variants={itemVariants}
           >
             <motion.div
