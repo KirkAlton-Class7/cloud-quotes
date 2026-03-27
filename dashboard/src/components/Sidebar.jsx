@@ -128,7 +128,7 @@ export default function Sidebar() {
                 </ul>
               </nav>
 
-              {/* Footer - Using SVG icons instead of lucide-react */}
+              {/* Footer */}
               <div className="p-6 border-t border-white/10">
                 <div className="space-y-3">
                   <motion.a
