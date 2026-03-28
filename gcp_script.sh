@@ -233,7 +233,7 @@ UPTIME="$(uptime -p || echo "unknown")"
 # System metrics (REAL)
 # -------------------------------
 
-CPU_USAGE="$(top -bn1 | grep 'Cpu(s)' | awk '{print $2}' 2>/dev/null || echo "0")"
+CPU_USAGE="$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.0f", usage}' 2>/dev/null || echo "0")"
 MEM_PERCENT="$(free | awk '/Mem:/ {printf("%.0f"), $3/$2 * 100.0}' 2>/dev/null || echo "0")"
 DISK_PERCENT="$(df / | tail -1 | awk '{print $5}' 2>/dev/null || echo "0%")"
 
@@ -357,45 +357,48 @@ rm -rf ${APP_DIR}/*
 cp -r "$REPO_DIR/dashboard/dist/"* ${APP_DIR}/
 
 # -------------------------------
-# Final quotes verification before Python
+# Force GitHub Quotes Before Python
 # -------------------------------
 
-log "Final quotes verification before generating dashboard data"
-if [ -f "${ACTIVE_QUOTES}" ]; then
-    if grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
-        log "CRITICAL: Fallback quotes still present! Aborting Python script to prevent fallback."
-        exit 1
-    else
-        QUOTE_COUNT=$(python3 -c "import json; print(len(json.load(open('${ACTIVE_QUOTES}'))))" 2>/dev/null)
-        log "Verified: ${QUOTE_COUNT} GitHub quotes ready"
-    fi
-fi
+log "Force fetching GitHub quotes before generating dashboard data"
 
-# -------------------------------
-# Force GitHub Quotes AGAIN right before Python
-# -------------------------------
-
-log "Final check - ensuring GitHub quotes are loaded before Python runs"
-
-# Force a fresh fetch right before Python runs
+# Force download from GitHub - always get latest
 retry curl -fsSL "${GITHUB_QUOTES_URL}" -o "${ACTIVE_QUOTES}.tmp"
 
 if [ $? -eq 0 ] && [ -s "${ACTIVE_QUOTES}.tmp" ]; then
+    # Validate JSON
     if python3 -c "import json; json.load(open('${ACTIVE_QUOTES}.tmp'))" 2>/dev/null; then
         mv "${ACTIVE_QUOTES}.tmp" "${ACTIVE_QUOTES}"
         cp "${ACTIVE_QUOTES}" "${LOCAL_QUOTES}"
-        log "✅ GitHub quotes loaded for Python script"
+        log "GitHub quotes loaded successfully"
         
-        # Show first quote to verify
-        FIRST_QUOTE=$(python3 -c "import json; print(json.load(open('${ACTIVE_QUOTES}'))[0]['text'][:60])" 2>/dev/null)
+        # Show first quote for verification
+        FIRST_QUOTE=$(python3 -c "import json; print(json.load(open('${ACTIVE_QUOTES}'))[0]['text'][:60])" 2>/dev/null || echo "Unknown")
         log "First quote: ${FIRST_QUOTE}..."
+    else
+        log "Invalid JSON from GitHub, keeping existing quotes"
+        rm -f "${ACTIVE_QUOTES}.tmp"
+    fi
+else
+    log "Failed to fetch GitHub quotes, using existing file if available"
+fi
+
+# Show final quote count
+if [ -f "${ACTIVE_QUOTES}" ]; then
+    QUOTE_COUNT=$(python3 -c "import json; print(len(json.load(open('${ACTIVE_QUOTES}'))))" 2>/dev/null || echo "0")
+    log "Final quotes file has ${QUOTE_COUNT} quotes"
+    
+    # Verify it's NOT fallback
+    if grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
+        log "WARNING: Fallback quotes detected! GitHub fetch may have failed."
+    else
+        log "Verified: GitHub quotes are ready"
     fi
 fi
 
 # -------------------------------
 # Generate JSON (inline Python)
 # -------------------------------
-
 log "Generating dashboard data"
 python3 <<PYTHON_SCRIPT
 import json, os, random
@@ -557,15 +560,64 @@ def get_cost_estimate():
         return f"Based on {machine_type} usage"
 
 # -------------------------------
-# Load Quotes
+# Load Quotes - WITH GITHUB FALLBACK
 # -------------------------------
 
+import urllib.request
+import json
+
 quotes = []
+github_url = "${GITHUB_QUOTES_URL}"
+
+# First try to load existing file
 try:
-    with open("${DATA_DIR}/quotes.json") as f:
+    with open("${DATA_DIR}/quotes.json", "r") as f:
         quotes = json.load(f)
+    print(f"Loaded {len(quotes)} quotes from file")
 except:
-    quotes = [{"text": "Fallback quote", "author": "System"}]
+    quotes = []
+
+# Check if we have valid quotes (not fallback)
+has_valid_quotes = False
+if quotes and len(quotes) > 0:
+    # Check if first quote is NOT Nietzsche (fallback)
+    first_text = quotes[0].get("text", "")
+    if "Nietzsche" not in first_text and "He who has a why" not in first_text:
+        has_valid_quotes = True
+        print("✅ Valid quotes already present")
+    else:
+        print("Fallback quotes detected, fetching from GitHub...")
+
+# If no valid quotes, fetch from GitHub
+if not has_valid_quotes:
+    try:
+        print(f"Fetching quotes from {github_url}...")
+        with urllib.request.urlopen(github_url, timeout=10) as response:
+            github_quotes = json.loads(response.read().decode())
+            if github_quotes and len(github_quotes) > 0:
+                quotes = github_quotes
+                # Save to file for next time
+                with open("${DATA_DIR}/quotes.json", "w") as f:
+                    json.dump(quotes, f, indent=2)
+                with open("${DATA_DIR}/quotes_local.json", "w") as f:
+                    json.dump(quotes, f, indent=2)
+                print(f"Fetched {len(quotes)} quotes from GitHub")
+            else:
+                raise Exception("Empty response")
+    except Exception as e:
+        print(f"Failed to fetch from GitHub: {e}")
+        # Use fallback as last resort
+        if not quotes:
+            quotes = [{"text": "Welcome to DevSecOps!", "author": "System"}]
+            print("Using fallback quote")
+
+# Final check
+if quotes and len(quotes) > 0:
+    print(f"Final quote count: {len(quotes)}")
+    print(f"First quote: {quotes[0].get('text', '')[:60]}...")
+else:
+    quotes = [{"text": "Welcome to DevSecOps!", "author": "System"}]
+    print("Using emergency fallback")
 
 quote = random.choice(quotes)
 
@@ -700,8 +752,8 @@ def get_cost_estimate():
     machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro')
     return f"${8.64:.2f}/month ({machine_type})"
 
-# Get current metrics - FIXED: using just user CPU instead of user+system
-cpu_usage = os.popen("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'").read().strip() or "0"
+# Get current metrics
+cpu_usage = os.popen("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf \"%.0f\", usage}'").read().strip() or "0"
 mem_percent = os.popen("free | awk '/Mem:/ {printf(\"%.0f\"), $3/$2 * 100.0}'").read().strip() or "0"
 disk_percent = os.popen("df / | tail -1 | awk '{print $5}'").read().strip() or "0%"
 uptime = os.popen("uptime -p").read().strip() or "up 0 minutes"
