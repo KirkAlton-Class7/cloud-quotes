@@ -372,6 +372,27 @@ if [ -f "${ACTIVE_QUOTES}" ]; then
 fi
 
 # -------------------------------
+# Force GitHub Quotes AGAIN right before Python
+# -------------------------------
+
+log "Final check - ensuring GitHub quotes are loaded before Python runs"
+
+# Force a fresh fetch right before Python runs
+retry curl -fsSL "${GITHUB_QUOTES_URL}" -o "${ACTIVE_QUOTES}.tmp"
+
+if [ $? -eq 0 ] && [ -s "${ACTIVE_QUOTES}.tmp" ]; then
+    if python3 -c "import json; json.load(open('${ACTIVE_QUOTES}.tmp'))" 2>/dev/null; then
+        mv "${ACTIVE_QUOTES}.tmp" "${ACTIVE_QUOTES}"
+        cp "${ACTIVE_QUOTES}" "${LOCAL_QUOTES}"
+        log "✅ GitHub quotes loaded for Python script"
+        
+        # Show first quote to verify
+        FIRST_QUOTE=$(python3 -c "import json; print(json.load(open('${ACTIVE_QUOTES}'))[0]['text'][:60])" 2>/dev/null)
+        log "First quote: ${FIRST_QUOTE}..."
+    fi
+fi
+
+# -------------------------------
 # Generate JSON (inline Python)
 # -------------------------------
 
