@@ -273,18 +273,36 @@ export CPU_USAGE MEM_PERCENT DISK_PERCENT RX_BYTES TX_BYTES
 
 
 # -------------------------------
-# Ensure Quotes are Available
+# Force GitHub Quotes (Always get latest)
 # -------------------------------
 
-log "Ensuring quotes are available before building dashboard"
-if [ ! -f "${ACTIVE_QUOTES}" ] || [ ! -s "${ACTIVE_QUOTES}" ]; then
-    log "Quotes file missing or empty, forcing fetch from GitHub"
-    retry curl -fsSL "${GITHUB_QUOTES_URL}" -o "${ACTIVE_QUOTES}.tmp" && \
-        mv "${ACTIVE_QUOTES}.tmp" "${ACTIVE_QUOTES}" && \
-        cp "${ACTIVE_QUOTES}" "${LOCAL_QUOTES}" && \
+log "Fetching latest quotes from GitHub"
+
+# Always fetch from GitHub - no fallback checks
+retry curl -fsSL "${GITHUB_QUOTES_URL}" -o "${ACTIVE_QUOTES}.tmp"
+
+if [ $? -eq 0 ] && [ -s "${ACTIVE_QUOTES}.tmp" ]; then
+    # Validate JSON
+    if python3 -c "import json; json.load(open('${ACTIVE_QUOTES}.tmp'))" 2>/dev/null; then
+        mv "${ACTIVE_QUOTES}.tmp" "${ACTIVE_QUOTES}"
+        cp "${ACTIVE_QUOTES}" "${LOCAL_QUOTES}"
         log "GitHub quotes fetched successfully"
+        
+        # Show first quote for verification
+        FIRST_QUOTE=$(python3 -c "import json; print(json.load(open('${ACTIVE_QUOTES}'))[0]['text'][:60])" 2>/dev/null || echo "Unknown")
+        log "First quote: ${FIRST_QUOTE}..."
+    else
+        log "Invalid JSON from GitHub, keeping existing quotes"
+        rm -f "${ACTIVE_QUOTES}.tmp"
+    fi
 else
-    log "Quotes file exists and has content"
+    log "Failed to fetch GitHub quotes, using existing file if available"
+fi
+
+# Count quotes
+if [ -f "${ACTIVE_QUOTES}" ]; then
+    QUOTE_COUNT=$(python3 -c "import json; print(len(json.load(open('${ACTIVE_QUOTES}'))))" 2>/dev/null || echo "0")
+    log "Quotes file has ${QUOTE_COUNT} quotes"
 fi
 
 # -------------------------------
@@ -645,7 +663,7 @@ except:
     quotes = [{"text": "Welcome to DevSecOps!", "author": "System"}]
     print("Using fallback quotes")
 
-# Build data - Cost is now in vmInformation, NOT in security
+# Build Data
 data = {
     "summaryCards": [
         {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
