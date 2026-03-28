@@ -548,9 +548,9 @@ def get_cost_estimate():
         machine_display = machine_type.replace('-', ' ').replace('_', ' ').title()
         
         if provider_display:
-            return f"\${total_monthly:.2f}/month ({provider_display} {machine_display})"
+            return f"${total_monthly:.2f}/month ({provider_display} {machine_display})"
         else:
-            return f"\${total_monthly:.2f}/month (est.)"
+            return f"${total_monthly:.2f}/month (est.)"
             
     except Exception as e:
         machine_type = os.environ.get('MACHINE_TYPE', 'standard')
@@ -698,7 +698,7 @@ def get_update_status():
 
 def get_cost_estimate():
     machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro')
-    return f"\${8.64:.2f}/month ({machine_type})"
+    return f"${8.64:.2f}/month ({machine_type})"
 
 # Get current metrics - FIXED: using just user CPU instead of user+system
 cpu_usage = os.popen("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'").read().strip() or "0"
