@@ -3,11 +3,33 @@ import { useState, useEffect } from "react";
 import { Quote, RefreshCw, Bookmark, Copy, Check, BookmarkCheck } from "lucide-react";
 import Card from "./Card";
 
-export default function QuoteCard({ quote }) {
+export default function QuoteCard({ quote: initialQuote }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [currentQuote, setCurrentQuote] = useState(quote);
+  const [currentQuote, setCurrentQuote] = useState(initialQuote);
+  const [quotesList, setQuotesList] = useState([]);
+
+  // Load quotes from GitHub on component mount
+  useEffect(() => {
+    async function loadQuotes() {
+      try {
+        const response = await fetch('/data/quotes.json', { cache: "no-store" });
+        if (response.ok) {
+          const quotes = await response.json();
+          setQuotesList(quotes);
+          // Pick a random quote from the loaded list
+          const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+          setCurrentQuote(randomQuote);
+        }
+      } catch (error) {
+        console.error('Failed to load quotes:', error);
+        // Keep the initial quote if fetch fails
+      }
+    }
+    
+    loadQuotes();
+  }, []);
 
   // Load saved quotes from localStorage
   useEffect(() => {
@@ -21,12 +43,18 @@ export default function QuoteCard({ quote }) {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      // Fetch a new random quote from the API
-      const response = await fetch('/data/quotes.json');
-      if (response.ok) {
-        const quotes = await response.json();
-        const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+      // Use the already loaded quotes list if available
+      if (quotesList.length > 0) {
+        const randomQuote = quotesList[Math.floor(Math.random() * quotesList.length)];
         setCurrentQuote(randomQuote);
+      } else {
+        // Fallback to fetching fresh
+        const response = await fetch('/data/quotes.json');
+        if (response.ok) {
+          const quotes = await response.json();
+          const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+          setCurrentQuote(randomQuote);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch new quote:', error);
@@ -46,11 +74,9 @@ export default function QuoteCard({ quote }) {
     let quotes = savedQuotes ? JSON.parse(savedQuotes) : [];
     
     if (saved) {
-      // Remove from saved
       quotes = quotes.filter(q => q.text !== currentQuote.text);
       setSaved(false);
     } else {
-      // Add to saved
       quotes.push(currentQuote);
       setSaved(true);
     }
