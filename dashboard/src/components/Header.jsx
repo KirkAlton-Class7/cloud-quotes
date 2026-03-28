@@ -56,7 +56,8 @@ export default function Header({ appName, tagline, uptime }) {
                 {appName}
               </p>
             </div>
-            {/* Tagline removed */}
+            {/* Tagline */}
+            <p className="text-xs text-slate-400 mt-1">{tagline}</p>
           </motion.div>
           
           <div className="flex items-center gap-2 lg:gap-4">

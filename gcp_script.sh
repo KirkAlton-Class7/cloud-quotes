@@ -1,26 +1,86 @@
 #!/usr/bin/env bash
 
+# -------------------------------
+# Dashboard Customization
+# -------------------------------
+# Edit these values to customize your dashboard
+
+# App name shown in the header (top left)
+DASHBOARD_APP_NAME="DevSecOps"
+
+# Tagline shown below the app name
+DASHBOARD_TAGLINE="Real-time infrastructure monitoring"
+
+# User name shown in the sidebar
+DASHBOARD_USER="Kirk Alton"
+
+# Dashboard title shown in the sidebar
+DASHBOARD_NAME="DevSecOps Dashboard"
+
+# ---------------------------------------------------------------------------------------------
+# !!! END OF CONFICURATION - DO NOT EDIT BELOW THIS LINE UNLESS YOU KNOW WHAT YOU ARE DOING !!!
+# ---------------------------------------------------------------------------------------------
+
+# Repo to pull the dashboard code from (can be changed to your fork)
+REPO_URL="https://github.com/KirkAlton-Class7/cloud-quotes.git"
+
+# URL to fetch quotes from (must be a valid quotes.json file inside your repo)
+GITHUB_QUOTES_URL="https://raw.githubusercontent.com/KirkAlton-Class7/cloud-quotes/main/quotes.json"
+
+# -------------------------------
+# System User
+# -------------------------------
 APP_USER="appuser"
 
-exec > /var/log/startup-script.log 2>&1
-set -x
-
-set -uo pipefail
-
+# -------------------------------
+# Application Paths
+# -------------------------------
+# Where the dashboard files are stored on the VM
 APP_NAME="devsecops-sandbox"
 APP_DIR="/var/www/${APP_NAME}"
 NGINX_SITE="/etc/nginx/sites-available/${APP_NAME}"
 DATA_DIR="${APP_DIR}/data"
 
-GITHUB_QUOTES_URL="https://raw.githubusercontent.com/KirkAlton-Class7/cloud-quotes/main/quotes.json"
-
+# -------------------------------
+# Environment Setup
+# -------------------------------
+# Disable interactive prompts during package installation
 export DEBIAN_FRONTEND=noninteractive
+
+# Export dashboard variables so Python can access them
+export DASHBOARD_APP_NAME
+export DASHBOARD_TAGLINE
+export DASHBOARD_USER
+export DASHBOARD_NAME
+
+# -------------------------------
+# Logging & Debugging
+# -------------------------------
+# Send all output (stdout + stderr) to a log file
+exec > /var/log/startup-script.log 2>&1
+
+# Print every command before executing (for debugging)
+set -x
+
+# Exit on unset variables and pipeline failures (makes script safer)
+set -uo pipefail
+
+# ----------------------------
+# Log Dashboard Customization
+# ----------------------------
+# Dashboard logging function
+log() { echo "[${APP_NAME}] $1"; }
+
+# Log dashboard cusotmization (for debugging)
+log "Dashboard customization:"
+log "  App Name: ${DASHBOARD_APP_NAME}"
+log "  Tagline: ${DASHBOARD_TAGLINE}"
+log "  User: ${DASHBOARD_USER}"
+log "  Dashboard Name: ${DASHBOARD_NAME}"
 
 # -------------------------------
 # Helper Functions
 # -------------------------------
-
-log() { echo "[${APP_NAME}] $1"; }
 
 md() {
   curl -fsS -H "Metadata-Flavor: Google" \
@@ -122,11 +182,11 @@ chmod -R 755 "${APP_DIR}"
 # Clone Repo
 # --------------------------------
 
-log "Cloning dashboard repo"
+log "Cloning dashboard repo from ${REPO_URL}"
 REPO_DIR="/opt/cloud-quotes"
 
 if [ ! -d "$REPO_DIR" ]; then
-  retry git clone "https://github.com/KirkAlton-Class7/cloud-quotes.git" "$REPO_DIR"
+  retry git clone "$REPO_URL" "$REPO_DIR"
 fi
 
 cd "$REPO_DIR" && git pull
@@ -665,10 +725,13 @@ data = {
         {"label": "Public IP", "value": os.environ.get('PUBLIC_IP', 'unknown'), "status": "info"}
     ],
     "meta": {
-        "appName": "DevSecOps",
-        "tagline": "Real-time infrastructure monitoring",
-        "uptime": os.environ.get("UPTIME", "unknown")
+    "appName": os.environ.get('DASHBOARD_APP_NAME', 'Custom Application'),
+    "tagline": os.environ.get('DASHBOARD_TAGLINE', 'Real-time infrastructure monitoring'),
+    "dashboardUser": os.environ.get('DASHBOARD_USER', 'Dashboard User'),
+    "dashboardName": os.environ.get('DASHBOARD_NAME', 'DevSecOps Dashboard'),
+    "uptime": os.environ.get("UPTIME", "unknown"),
     },
+
     "quote": quote,
     "logs": logs,
     "resourceTable": resource_table,

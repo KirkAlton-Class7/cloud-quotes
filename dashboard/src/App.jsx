@@ -87,7 +87,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <Sidebar />
+      <Sidebar
+      dashboardUser={dashboard.meta?.dashboardUser || "Kirk Alton"}
+      dashboardName={dashboard.meta?.dashboardName || "DevSecOps Dashboard"}
+      />
 
       <motion.div 
         className="lg:ml-72"
@@ -96,7 +99,8 @@ export default function App() {
         transition={{ duration: 0.5 }}
       >
         <Header
-          appName={dashboard.meta?.appName || "DevSecOps"}
+          appName={dashboard.meta?.appName || "Custom Application"}
+          tagline={dashboard.meta?.tagline || "Real-time infrastructure monitoring"}
           uptime={dashboard.meta?.uptime || "Unknown"}
         />
 

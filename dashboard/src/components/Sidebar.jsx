@@ -11,7 +11,7 @@ const navItems = [
   { id: "logs", label: "Logs", icon: Logs },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ dashboardUser = "Kirk Alton", dashboardName = "DevSecOps Dashboard" }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
 
@@ -74,10 +74,10 @@ export default function Sidebar() {
                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-r from-cyan-500/20 to-purple-600/20 rounded-full blur-2xl"></div>
                   <div className="relative">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                      DevSecOps Sandbox
+                      {dashboardUser}
                     </p>
                     <h1 className="mt-2 text-xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-                      Cloud VM Dashboard
+                      {dashboardName}
                     </h1>
                   </div>
                 </motion.div>
