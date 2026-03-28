@@ -6,7 +6,7 @@
 # Edit these values to customize your dashboard
 
 # App name shown in the header (top left)
-DASHBOARD_APP_NAME="DevSecOps"
+DASHBOARD_APP_NAME="GCP - Week 3"
 
 # Tagline shown below the app name
 DASHBOARD_TAGLINE="Real-time infrastructure monitoring"
@@ -285,7 +285,15 @@ ZONE="$(safe_basename "$(md instance/zone)" || echo "unknown")"
 MACHINE_TYPE="$(safe_basename "$(md instance/machine-type)" || echo "unknown")"
 PROJECT_ID="$(md project/project-id || echo "unknown")"
 INTERNAL_IP="$(md instance/network-interfaces/0/ip || hostname -I | awk '{print $1}')"
-PUBLIC_IP="$(md instance/network-interfaces/0/access-configs/0/external-ip 2>/dev/null || curl -s ifconfig.me 2>/dev/null || echo "unknown")"
+
+PUBLIC_IP=$(md instance/network-interfaces/0/access-configs/0/external-ip 2>/dev/null)
+if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "unknown" ]; then
+    PUBLIC_IP=$(curl -s ifconfig.me | tr -d '\n')
+fi
+if [ -z "$PUBLIC_IP" ]; then
+    PUBLIC_IP="unknown"
+fi
+
 OS_NAME="$(. /etc/os-release && echo "$PRETTY_NAME")"
 UPTIME="$(uptime -p || echo "unknown")"
 
