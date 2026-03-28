@@ -278,7 +278,7 @@ export CPU_USAGE MEM_PERCENT DISK_PERCENT RX_BYTES TX_BYTES
 
 log "Fetching latest quotes from GitHub"
 
-# Always fetch from GitHub - no fallback checks
+# Force fetch - always overwrite
 retry curl -fsSL "${GITHUB_QUOTES_URL}" -o "${ACTIVE_QUOTES}.tmp"
 
 if [ $? -eq 0 ] && [ -s "${ACTIVE_QUOTES}.tmp" ]; then
@@ -291,6 +291,11 @@ if [ $? -eq 0 ] && [ -s "${ACTIVE_QUOTES}.tmp" ]; then
         # Show first quote for verification
         FIRST_QUOTE=$(python3 -c "import json; print(json.load(open('${ACTIVE_QUOTES}'))[0]['text'][:60])" 2>/dev/null || echo "Unknown")
         log "First quote: ${FIRST_QUOTE}..."
+        
+        # Verify it's NOT a fallback quote (check for Nietzsche)
+        if grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
+            log "WARNING: Still seeing fallback quotes! GitHub fetch may have failed silently."
+        fi
     else
         log "Invalid JSON from GitHub, keeping existing quotes"
         rm -f "${ACTIVE_QUOTES}.tmp"
@@ -299,10 +304,25 @@ else
     log "Failed to fetch GitHub quotes, using existing file if available"
 fi
 
-# Count quotes
+# Count quotes and show sample
 if [ -f "${ACTIVE_QUOTES}" ]; then
     QUOTE_COUNT=$(python3 -c "import json; print(len(json.load(open('${ACTIVE_QUOTES}'))))" 2>/dev/null || echo "0")
     log "Quotes file has ${QUOTE_COUNT} quotes"
+    
+    # Show first author to verify it's GitHub
+    FIRST_AUTHOR=$(python3 -c "import json; print(json.load(open('${ACTIVE_QUOTES}'))[0].get('author', 'Unknown'))" 2>/dev/null)
+    log "First author: ${FIRST_AUTHOR}"
+fi
+
+# If quotes file still has fallback, force a second attempt with wget
+if [ -f "${ACTIVE_QUOTES}" ] && grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
+    log "⚠️ Fallback quotes detected! Retrying with wget..."
+    wget -q -O "${ACTIVE_QUOTES}.tmp" "${GITHUB_QUOTES_URL}"
+    if [ $? -eq 0 ] && python3 -c "import json; json.load(open('${ACTIVE_QUOTES}.tmp'))" 2>/dev/null; then
+        mv "${ACTIVE_QUOTES}.tmp" "${ACTIVE_QUOTES}"
+        cp "${ACTIVE_QUOTES}" "${LOCAL_QUOTES}"
+        log "✅ Second attempt successful!"
+    fi
 fi
 
 # -------------------------------
@@ -337,6 +357,21 @@ log "Build successful"
 log "Deploying dashboard"
 rm -rf ${APP_DIR}/*
 cp -r "$REPO_DIR/dashboard/dist/"* ${APP_DIR}/
+
+# -------------------------------
+# Final quotes verification before Python
+# -------------------------------
+
+log "Final quotes verification before generating dashboard data"
+if [ -f "${ACTIVE_QUOTES}" ]; then
+    if grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
+        log "RITICAL: Fallback quotes still present! Aborting Python script to prevent fallback."
+        exit 1
+    else
+        QUOTE_COUNT=$(python3 -c "import json; print(len(json.load(open('${ACTIVE_QUOTES}'))))" 2>/dev/null)
+        log "Verified: ${QUOTE_COUNT} GitHub quotes ready"
+    fi
+fi
 
 # -------------------------------
 # Generate JSON (inline Python)
