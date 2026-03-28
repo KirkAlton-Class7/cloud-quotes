@@ -232,6 +232,7 @@ UPTIME="$(uptime -p || echo "unknown")"
 # -------------------------------
 # System metrics (REAL)
 # -------------------------------
+cpu_usage = os.popen("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'").read().strip() or "0"
 
 CPU_USAGE="$(top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}' 2>/dev/null || echo "0")"
 MEM_PERCENT="$(free | awk '/Mem:/ {printf("%.0f"), $3/$2 * 100.0}' 2>/dev/null || echo "0")"
@@ -540,6 +541,7 @@ data = {
         {"label": "Machine Type", "value": os.environ.get('MACHINE_TYPE', 'unknown')},
         {"label": "OS", "value": os.environ.get('OS_NAME', 'unknown')},
         {"label": "Project ID", "value": os.environ.get('PROJECT_ID', 'unknown')}
+        {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
     ],
     "services": [
         {"label": "Nginx", "value": os.environ.get('NGINX_STATUS', 'Unknown'), "status": "healthy"},
@@ -556,7 +558,6 @@ data = {
         {"label": "Updates", "value": get_update_status(), "status": "info"},
         {"label": "Internal IP", "value": os.environ.get('INTERNAL_IP', 'unknown'), "status": "info"},
         {"label": "Public IP", "value": os.environ.get('PUBLIC_IP', 'unknown'), "status": "info"},
-        {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
     ],
     "meta": {
         "appName": "DevSecOps",
@@ -579,9 +580,9 @@ with open("${DATA_DIR}/dashboard-data.json", "w") as f:
 print("Dashboard data generated successfully")
 PYTHON_SCRIPT
 
-# -------------------------------
+# -----------------------------------
 # Cron Job to Refresh Dashboard Data
-# -------------------------------
+# -----------------------------------
 
 log "Setting up cron job to refresh dashboard data"
 
@@ -595,16 +596,6 @@ def status(val, warn=70):
         return "warning" if float(val) > warn else "healthy"
     except:
         return "healthy"
-
-def get_network_info():
-    try:
-        rx_bytes = int(os.environ.get('RX_BYTES', '0'))
-        tx_bytes = int(os.environ.get('TX_BYTES', '0'))
-        rx_mb = rx_bytes / (1024 * 1024)
-        tx_mb = tx_bytes / (1024 * 1024)
-        return f"{rx_mb:.1f} MB ↓ / {tx_mb:.1f} MB ↑"
-    except:
-        return os.environ.get('RX_BYTES', '0') + " / " + os.environ.get('TX_BYTES', '0')
 
 def get_load_average():
     try:
@@ -631,79 +622,14 @@ def get_update_status():
         else:
             return f"{update_count} updates available"
     except:
-        return os.environ.get('UPDATE_STATUS', 'Current')
+        return "Current"
 
 def get_cost_estimate():
-    try:
-        machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
-        try:
-            cpu = float(os.environ.get('CPU_USAGE', '0'))
-            mem = float(os.environ.get('MEM_PERCENT', '0'))
-        except:
-            cpu = 0; mem = 0
-        
-        provider = "unknown"
-        try:
-            import subprocess
-            gcp_check = subprocess.run(['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google', 'http://metadata.google.internal/computeMetadata/v1/instance/zone'], capture_output=True, text=True, timeout=2)
-            if gcp_check.returncode == 0 and gcp_check.stdout:
-                provider = "gcp"
-        except: pass
-        
-        if provider == "unknown":
-            try:
-                aws_check = subprocess.run(['curl', '-s', '--max-time', '2', 'http://169.254.169.254/latest/meta-data/instance-id'], capture_output=True, text=True, timeout=2)
-                if aws_check.returncode == 0 and aws_check.stdout:
-                    provider = "aws"
-            except: pass
-        
-        if provider == "unknown":
-            try:
-                azure_check = subprocess.run(['curl', '-s', '--max-time', '2', '-H', 'Metadata:true', 'http://169.254.169.254/metadata/instance?api-version=2017-08-01'], capture_output=True, text=True, timeout=2)
-                if azure_check.returncode == 0 and azure_check.stdout:
-                    provider = "azure"
-            except: pass
-        
-        machine_size = "micro"
-        if "micro" in machine_type: machine_size = "micro"
-        elif "small" in machine_type: machine_size = "small"
-        elif "medium" in machine_type: machine_size = "medium"
-        elif "large" in machine_type: machine_size = "large"
-        
-        pricing = {
-            "gcp": {"micro": 0.012, "small": 0.025, "medium": 0.050, "large": 0.100},
-            "aws": {"micro": 0.0116, "small": 0.023, "medium": 0.046, "large": 0.092},
-            "azure": {"micro": 0.012, "small": 0.024, "medium": 0.048, "large": 0.096}
-        }
-        
-        if provider in pricing and machine_size in pricing[provider]:
-            base_hourly = pricing[provider][machine_size]
-        elif provider in pricing:
-            base_hourly = pricing[provider]["micro"]
-        else:
-            base_hourly = 0.015
-        
-        cpu_multiplier = min(max(cpu / 100, 0.1), 1.0)
-        mem_multiplier = min(max(mem / 100, 0.1), 1.0)
-        usage_factor = (cpu_multiplier + mem_multiplier) / 2
-        
-        monthly_cost = base_hourly * 720 * usage_factor
-        storage_cost = 1.00
-        total_monthly = monthly_cost + storage_cost
-        
-        provider_names = {"gcp": "GCP", "aws": "AWS", "azure": "Azure"}
-        provider_display = provider_names.get(provider, "")
-        machine_display = machine_type.replace('-', ' ').replace('_', ' ').title()
-        
-        if provider_display:
-            return f"\${total_monthly:.2f}/month ({provider_display} {machine_display})"
-        else:
-            return f"\${total_monthly:.2f}/month (est.)"
-    except:
-        return "Based on usage"
+    machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro')
+    return f"\${8.64:.2f}/month ({machine_type})"
 
-# Get current metrics
-cpu_usage = os.popen("top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'").read().strip() or "0"
+# Get current metrics - FIXED: using just user CPU instead of user+system
+cpu_usage = os.popen("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'").read().strip() or "0"
 mem_percent = os.popen("free | awk '/Mem:/ {printf(\"%.0f\"), $3/$2 * 100.0}'").read().strip() or "0"
 disk_percent = os.popen("df / | tail -1 | awk '{print $5}'").read().strip() or "0%"
 uptime = os.popen("uptime -p").read().strip() or "up 0 minutes"
@@ -714,10 +640,12 @@ quotes = []
 try:
     with open("/var/www/devsecops-sandbox/data/quotes.json") as f:
         quotes = json.load(f)
+    print(f"Loaded {len(quotes)} quotes")
 except:
     quotes = [{"text": "Welcome to DevSecOps!", "author": "System"}]
+    print("Using fallback quotes")
 
-# Build data
+# Build data - Cost is now in vmInformation, NOT in security
 data = {
     "summaryCards": [
         {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
@@ -731,7 +659,8 @@ data = {
         {"label": "Zone", "value": os.environ.get('ZONE', 'unknown')},
         {"label": "Machine Type", "value": os.environ.get('MACHINE_TYPE', 'unknown')},
         {"label": "OS", "value": os.environ.get('OS_NAME', 'Debian 12')},
-        {"label": "Project ID", "value": os.environ.get('PROJECT_ID', 'unknown')}
+        {"label": "Project ID", "value": os.environ.get('PROJECT_ID', 'unknown')},
+        {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
     ],
     "services": [
         {"label": "Nginx", "value": os.environ.get('NGINX_STATUS', 'Running'), "status": "healthy"},
@@ -747,8 +676,7 @@ data = {
         {"label": "SSH", "value": get_ssh_status(), "status": "healthy"},
         {"label": "Updates", "value": get_update_status(), "status": "info"},
         {"label": "Internal IP", "value": os.environ.get('INTERNAL_IP', 'unknown'), "status": "info"},
-        {"label": "Public IP", "value": os.environ.get('PUBLIC_IP', 'unknown'), "status": "info"},
-        {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
+        {"label": "Public IP", "value": os.environ.get('PUBLIC_IP', 'unknown'), "status": "info"}
     ],
     "meta": {
         "appName": "DevSecOps",
@@ -757,8 +685,7 @@ data = {
     },
     "quote": random.choice(quotes),
     "logs": [
-        {"time": datetime.now().strftime("%H:%M:%S"), "level": "info", "scope": "system", "message": f"Dashboard updated - CPU: {cpu_usage}%, Memory: {mem_percent}%"},
-        {"time": (datetime.now() - timedelta(minutes=5)).strftime("%H:%M:%S"), "level": "info", "scope": "metrics", "message": "Metrics refreshed"}
+        {"time": datetime.now().strftime("%H:%M:%S"), "level": "info", "scope": "system", "message": f"Dashboard updated - CPU: {cpu_usage}%, Memory: {mem_percent}%"}
     ],
     "resourceTable": [
         {"name": "nginx", "type": "service", "scope": "system", "status": "Running"},
@@ -771,8 +698,17 @@ data = {
 with open("/var/www/devsecops-sandbox/data/dashboard-data.json", "w") as f:
     json.dump(data, f, indent=2)
 
-print(f"Dashboard data refreshed - CPU: {cpu_usage}%, Memory: {mem_percent}%")
+print(f"Dashboard data refreshed - CPU: {cpu_usage}%, Memory: {mem_percent}%, Disk: {disk_percent}")
 EOF
+
+# Make it executable
+chmod +x /opt/refresh-dashboard-data.py
+
+# Set up cron job to refresh every 5 minutes
+REFRESH_CRON_CMD="*/5 * * * * /usr/bin/python3 /opt/refresh-dashboard-data.py >> /var/log/dashboard-refresh.log 2>&1"
+(crontab -l 2>/dev/null | grep -v 'refresh-dashboard-data'; echo "$REFRESH_CRON_CMD") | crontab -
+
+log "Dashboard refresh cron job configured (every 5 minutes)"
 
 # Make it executable
 chmod +x /opt/refresh-dashboard-data.py
