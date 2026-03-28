@@ -97,7 +97,6 @@ export default function App() {
       >
         <Header
           appName={dashboard.meta?.appName || "DevSecOps"}
-          tagline={dashboard.meta?.tagline || "Real-time infrastructure monitoring"}
           uptime={dashboard.meta?.uptime || "Unknown"}
         />
 

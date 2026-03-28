@@ -5,97 +5,10 @@ import { useState, useEffect } from "react";
 export default function Header({ appName, tagline, uptime }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [cloudProvider, setCloudProvider] = useState({ name: "Cloud", color: "from-slate-500 to-slate-400" });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  // Detect cloud provider dynamically
-  useEffect(() => {
-    async function detectCloudProvider() {
-      // Add a small delay to let the page load
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Check for GCP metadata endpoint first (most reliable)
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const gcpCheck = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/zone', {
-          headers: { 'Metadata-Flavor': 'Google' },
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (gcpCheck.ok) {
-          console.log("✅ Detected: Google Cloud");
-          setCloudProvider({ name: "Google Cloud", color: "from-emerald-500 to-green-400" });
-          return;
-        }
-      } catch (e) {
-        console.log("GCP metadata not available:", e.message);
-      }
-
-      // Check for AWS metadata endpoint
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const awsCheck = await fetch('http://169.254.169.254/latest/meta-data/instance-id', {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (awsCheck.ok) {
-          console.log("✅ Detected: AWS");
-          setCloudProvider({ name: "AWS", color: "from-orange-500 to-amber-400" });
-          return;
-        }
-      } catch (e) {
-        console.log("AWS metadata not available");
-      }
-
-      // Check for Azure metadata endpoint
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const azureCheck = await fetch('http://169.254.169.254/metadata/instance?api-version=2017-08-01', {
-          headers: { 'Metadata': 'true' },
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (azureCheck.ok) {
-          console.log("✅ Detected: Azure");
-          setCloudProvider({ name: "Azure", color: "from-blue-500 to-blue-400" });
-          return;
-        }
-      } catch (e) {
-        console.log("Azure metadata not available");
-      }
-
-      // Fallback - check hostname (works locally and when metadata fails)
-      const hostname = window.location.hostname;
-      console.log("Hostname detection:", hostname);
-      
-      if (hostname.includes('google') || hostname.includes('gcp') || hostname.includes('.internal')) {
-        setCloudProvider({ name: "Google Cloud", color: "from-emerald-500 to-green-400" });
-      } else if (hostname.includes('amazon') || hostname.includes('aws')) {
-        setCloudProvider({ name: "AWS", color: "from-orange-500 to-amber-400" });
-      } else if (hostname.includes('azure')) {
-        setCloudProvider({ name: "Azure", color: "from-blue-500 to-blue-400" });
-      } else {
-        setCloudProvider({ name: "Cloud", color: "from-slate-500 to-slate-400" });
-      }
-    }
-
-    detectCloudProvider();
   }, []);
 
   const formattedTime = currentTime.toLocaleTimeString('en-US', { 
@@ -109,13 +22,6 @@ export default function Header({ appName, tagline, uptime }) {
     month: 'short',
     day: 'numeric'
   });
-
-  const getDeploymentText = () => {
-    if (cloudProvider.name === "Google Cloud") return "Google Cloud Deployment";
-    if (cloudProvider.name === "AWS") return "AWS Deployment";
-    if (cloudProvider.name === "Azure") return "Azure Deployment";
-    return "Cloud Deployment";
-  };
 
   return (
     <motion.header
@@ -150,18 +56,7 @@ export default function Header({ appName, tagline, uptime }) {
                 {appName}
               </p>
             </div>
-            {/* Dynamic deployment text */}
-            <div className="flex items-center gap-2 mt-1">
-              <motion.div 
-                className={`px-2 py-0.5 rounded-full bg-gradient-to-r ${cloudProvider.color} bg-opacity-20 backdrop-blur-sm border border-white/10`}
-                whileHover={{ scale: 1.05 }}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                <span className="text-xs font-medium text-slate-300 whitespace-nowrap">{getDeploymentText()}</span>
-              </motion.div>
-            </div>
+            {/* Tagline removed */}
           </motion.div>
           
           <div className="flex items-center gap-2 lg:gap-4">

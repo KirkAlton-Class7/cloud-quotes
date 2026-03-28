@@ -64,7 +64,7 @@ export default function Sidebar() {
           >
             <div className="flex flex-col h-full">
               {/* Header */}
-              <div className="p-6 border-b border-white/10 mt-16">
+              <div className="p-6 border-b border-white/10">
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
