@@ -1741,5 +1741,47 @@
     "author": "Bakari Williams",
     "source": null,
     "tags": ["preparation", "success"]
+  },
+  {
+  "id": 250,
+  "text": "If fate doesn't make you laugh, then you just don't get the joke.",
+  "author": "Karla",
+  "source": "Shantaram",
+  "tags": ["fate", "wisdom"]
+  },
+  {
+    "id": 251,
+    "text": "Fear and guilt are the dark angels that haunt rich men. Despair and humiliation haunt the poor.",
+    "author": "Khader Bhai & Lin",
+    "source": "Shantaram",
+    "tags": ["fear", "guilt", "despair", "wealth", "poverty"]
+  },
+  {
+    "id": 252,
+    "text": "Fate's way of beating us in a fair fight is to give us warnings that we hear, but never heed.",
+    "author": "Unknown",
+    "source": "Shantaram",
+    "tags": ["fate", "warning", "wisdom"]
+  },
+  {
+    "id": 253,
+    "text": "The only force more ruthless and cynical than the business of big politics is the politics of big business.",
+    "author": "Didier",
+    "source": "Shantaram",
+    "tags": ["politics", "business", "power", "cynicism"]
+  },
+  {
+    "id": 254,
+    "text": "Sometimes the lion must roar, just to remind the horse of his fear.",
+    "author": "Abdullah",
+    "source": "Shantaram",
+    "tags": ["courage", "power", "fear", "strength"]
+  },
+  {
+    "id": 255,
+    "text": "If we can't respect the way we earn it, money has no value. If we can't use it to make life better for our families and loved ones, money has no purpose.",
+    "author": "Lin",
+    "source": "Shantaram",
+    "tags": ["money", "values", "family", "purpose"]
   }
 ]
