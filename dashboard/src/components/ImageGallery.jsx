@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { RefreshCw, Heart, ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import Card from "./Card";
 
-const sceneryImages = [
+const galleryImages = [
   {
     filename: "chiang_mai_mountain_sunrise.jpeg",
     title: "Mountain Sunrise",
@@ -106,7 +106,7 @@ const shuffleArray = (array) => {
   return shuffled;
 };
 
-export default function SceneryGallery() {
+export default function ImageGallery() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [liked, setLiked] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -115,7 +115,7 @@ export default function SceneryGallery() {
 
   // Shuffle images on component mount
   useEffect(() => {
-    setShuffledImages(shuffleArray(sceneryImages));
+    setShuffledImages(shuffleArray(galleryImages));
   }, []);
 
   const currentImage = shuffledImages[currentIndex];

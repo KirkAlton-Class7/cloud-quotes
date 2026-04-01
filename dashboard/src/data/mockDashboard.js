@@ -6,15 +6,53 @@ export const mockDashboard = {
     { label: "Cost", value: "$12.48/month", status: "info" },
   ],
   
-  vmInformation: [
-    { label: "Hostname", value: "prod-worker-03.internal", status: "healthy" },
-    { label: "Instance ID", value: "1234567890123456789", status: "healthy" },
-    { label: "Zone", value: "us-central1-a", status: "healthy" },
-    { label: "Machine Type", value: "e2-standard-2", status: "healthy" },
-    { label: "OS", value: "Ubuntu 24.04 LTS", status: "healthy" },
-    { label: "Project ID", value: "devsecops-production", status: "healthy" },
-    { label: "Estimated Cost (Usage)", value: "$45.50/month", status: "info" }
-  ],
+  // New: Identity Section
+  identity: {
+    project: "devsecops-production",
+    instanceId: "1234567890123456789",
+    hostname: "prod-worker-03.internal",
+    machineType: "e2-standard-2"
+  },
+  
+  // New: Network Section
+  network: {
+    vpc: "default",
+    subnet: "us-central1-prod-subnet",
+    internalIp: "10.128.0.5",
+    externalIp: "34.122.10.22"
+  },
+  
+  // New: Location Section
+  location: {
+    region: "us-central1",
+    zone: "us-central1-a",
+    uptime: "up 6 days, 14 hours",
+    loadAvg: "2.45"
+  },
+  
+  systemResources: {
+    memory: {
+      total: 8192,   // MB
+      used: 5570,
+      free: 2622
+    },
+    disk: {
+      total: 102400,  // MB
+      used: 46080,
+      available: 56320
+    },
+    cpu: {
+      cores: 2,
+      frequency: "2.2 GHz",
+      usage: 72,  // matches summary card CPU%
+      loadAvg: 2.45  // matches systemLoad
+    },
+    endpoints: {
+      healthz: "/healthz",
+      metadata: "/metadata"
+    }
+  },
+  
   services: [
     { label: "Nginx", value: "Running (12 req/s)", status: "healthy" },
     { label: "Python", value: "Installed", status: "healthy" },
@@ -24,6 +62,7 @@ export const mockDashboard = {
     { label: "GitHub Quotes Sync", value: "Successful", status: "healthy" },
     { label: "Bootstrap Packages", value: "nginx, python3, curl, jq", status: "healthy" },
   ],
+  
   security: [
     { label: "Host Firewall (UFW)", value: "active", status: "healthy" },
     { label: "SSH Service", value: "Running (22/tcp)", status: "healthy" },
@@ -32,8 +71,6 @@ export const mockDashboard = {
     { label: "Public IP", value: "34.122.10.22", status: "warning" },
     { label: "Failed Login Attempts", value: "12 (last hour)", status: "warning" },
   ],
-  
-  systemLoad: "2.45",
   
   resourceTable: [
     { name: "nginx.service", type: "systemd", status: "Running", scope: "vm" },
@@ -44,8 +81,7 @@ export const mockDashboard = {
     { name: "quotes.json", type: "content", status: "Ready", scope: "app" },
   ],
   
-    // Fixed logs structure - proper columns for ResourceTable
-    logs: [
+  logs: [
     { 
       time: "14:32:15", 
       level: "warn", 
@@ -77,9 +113,12 @@ export const mockDashboard = {
       scope: "security"
     },
   ],
+  
   meta: {
     appName: "DevSecOps",
     tagline: "Production monitoring • High activity detected",
+    dashboardUser: "Kirk Alton",
+    dashboardName: "DevSecOps Dashboard",
     uptime: "up 6 days, 14 hours",
   },
 };

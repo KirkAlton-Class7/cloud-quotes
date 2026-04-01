@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Header from "./components/Header";
 import QuoteCard from "./components/QuoteCard";
-import SceneryGallery from "./components/SceneryGallery";
+import ImageGallery from "./components/ImageGallery";
 import ResourceTable from "./components/ResourceTable";
 import SectionList from "./components/SectionList";
 import Sidebar from "./components/Sidebar";
-import RealTimeMetrics from "./components/RealTimeMetrics";
 import StatCard from "./components/StatCard";
+import IdentityCard from "./components/IdentityCard";
+import NetworkCard from "./components/NetworkCard";
+import LocationCard from "./components/LocationCard";
+import SystemResourcesCard from "./components/SystemResourcesCard";
+import LoadTrendChart from "./components/LoadTrendChart";
 import { mockDashboard, mockQuotes } from "./data/mockDashboard";
 
 function getRandomQuote(quotes) {
@@ -88,8 +92,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <Sidebar
-      dashboardUser={dashboard.meta?.dashboardUser || "Kirk Alton"}
-      dashboardName={dashboard.meta?.dashboardName || "DevSecOps Dashboard"}
+        dashboardUser={dashboard.meta?.dashboardUser || "Kirk Alton"}
+        dashboardName={dashboard.meta?.dashboardName || "DevSecOps Dashboard"}
       />
 
       <motion.div 
@@ -110,7 +114,7 @@ export default function App() {
           initial="hidden"
           animate="visible"
         >
-          {/* Stats Cards */}
+          {/* Stats Cards - Live Current Values */}
           <motion.section 
             id="overview" 
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full"
@@ -135,7 +139,15 @@ export default function App() {
             ))}
           </motion.section>
 
-          {/* Real-time Metrics & Quote & Gallery */}
+          {/* Load Trend Chart - Historical Load Average */}
+          <motion.section 
+            className="grid grid-cols-1 gap-6"
+            variants={itemVariants}
+          >
+            <LoadTrendChart />
+          </motion.section>
+
+          {/* Quote & Gallery */}
           <motion.section 
             className="grid grid-cols-1 gap-6 lg:grid-cols-3"
             variants={itemVariants}
@@ -145,7 +157,8 @@ export default function App() {
               whileHover={{ scale: 1.01 }}
               transition={{ type: "spring", stiffness: 300 }}
             >
-              <RealTimeMetrics />
+              {/* This space is intentionally left for future expansion */}
+              <div className="h-full" />
             </motion.div>
             <div className="space-y-6">
               <motion.div
@@ -158,77 +171,57 @@ export default function App() {
                 whileHover={{ y: -3 }}
                 transition={{ duration: 0.2 }}
               >
-                <SceneryGallery />
+                <ImageGallery />
               </motion.div>
             </div>
           </motion.section>
 
-          {/* Info Sections */}
+          {/* Identity, Network, Location - Consolidated Cards */}
           <motion.section 
             className="grid grid-cols-1 gap-6 lg:grid-cols-3"
             variants={itemVariants}
           >
-            <motion.div 
-              id="vm-information"
-              whileHover={{ y: -3 }}
-              transition={{ duration: 0.2 }}
-            >
-              <SectionList
-                title="VM Information"
-                subtitle="Core instance identity and placement"
-                items={dashboard.vmInformation || []}
-              />
-            </motion.div>
-            <motion.div 
-              id="services"
-              whileHover={{ y: -3 }}
-              transition={{ duration: 0.2 }}
-            >
-              <SectionList
-                title="Services"
-                subtitle="Application and bootstrap health"
-                items={dashboard.services || []}
-              />
-            </motion.div>
-            <motion.div 
-              id="security"
-              whileHover={{ y: -3 }}
-              transition={{ duration: 0.2 }}
-            >
-              <SectionList
-                title="Security"
-                subtitle="Host posture and network exposure"
-                items={dashboard.security || []}
-              />
-            </motion.div>
+            <IdentityCard identity={dashboard.identity || {}} />
+            <NetworkCard network={dashboard.network || {}} />
+            <LocationCard location={dashboard.location || {}} />
           </motion.section>
 
-          {/* Resource Tables */}
+          {/* Services Status */}
           <motion.section 
-            id="resources" 
-            className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+            className="grid grid-cols-1 gap-6"
             variants={itemVariants}
           >
-            <motion.div
-              whileHover={{ y: -3 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ResourceTable rows={dashboard.resourceTable || []} title="System Resources" />
-            </motion.div>
-            <motion.div
-              whileHover={{ y: -3 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ResourceTable
-                rows={dashboard.logs?.map((log) => ({
-                  name: log.time,
-                  type: log.level,
-                  scope: "app",
-                  status: log.message,
-                })) || []}
-                title="Application Logs"
-              />
-            </motion.div>
+            <SectionList
+              title="Services"
+              subtitle="Application and bootstrap health"
+              items={dashboard.services || []}
+            />
+          </motion.section>
+
+          {/* System Resources - Enhanced Resource View */}
+          <motion.section 
+            className="grid grid-cols-1 gap-6"
+            variants={itemVariants}
+          >
+            <SystemResourcesCard resources={dashboard.systemResources || {}} />
+          </motion.section>
+
+          {/* Application Logs */}
+          <motion.section 
+            id="logs" 
+            className="grid grid-cols-1 gap-6"
+            variants={itemVariants}
+          >
+            <ResourceTable
+              rows={dashboard.logs?.map((log) => ({
+                name: log.time,
+                type: log.level,
+                scope: log.scope || "app",
+                status: log.message,
+              })) || []}
+              title="Application Logs"
+              isLogs={true}
+            />
           </motion.section>
         </motion.main>
       </motion.div>
