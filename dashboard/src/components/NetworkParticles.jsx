@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
-// First variant: original wrapping network with cyan connections
-const NetworkParticles = () => {
+// Blue particle mode – now called "Drift"
+const DriftParticles = () => {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -31,7 +31,6 @@ const NetworkParticles = () => {
       update(width, height) {
         this.x += this.vx;
         this.y += this.vy;
-        // Wrap edges
         if (this.x < 0) this.x = width;
         if (this.x > width) this.x = 0;
         if (this.y < 0) this.y = height;
@@ -103,8 +102,8 @@ const NetworkParticles = () => {
   );
 };
 
-// Second variant: bouncing, repulsion, inverted connections
-const ActiveNetworkParticles = () => {
+// Purple particle mode – now called "Haze"
+const HazeParticles = () => {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -159,7 +158,6 @@ const ActiveNetworkParticles = () => {
         this.x += this.vx;
         this.y += this.vy;
 
-        // Bounce off edges
         if (this.x < 0) { this.x = 0; this.vx = -this.vx; }
         if (this.x > width) { this.x = width; this.vx = -this.vx; }
         if (this.y < 0) { this.y = 0; this.vy = -this.vy; }
@@ -232,21 +230,46 @@ const ActiveNetworkParticles = () => {
   );
 };
 
-// Main toggle component
+// Main toggle component with transient title overlay
 const ToggleNetworkParticles = () => {
-  const [variant, setVariant] = useState(0); // 0 = NetworkParticles, 1 = ActiveNetworkParticles
+  const [variant, setVariant] = useState(0); // 0 = Drift, 1 = Haze
+  const [showTitle, setShowTitle] = useState(false);
+  const [titleText, setTitleText] = useState("");
+  const timeoutRef = useRef(null);
 
   const handleClick = () => {
-    setVariant(v => v === 0 ? 1 : 0);
+    // Determine new variant and its title
+    const newVariant = variant === 0 ? 1 : 0;
+    const newTitle = newVariant === 0 ? "Drift" : "Haze";
+    
+    // Update variant
+    setVariant(newVariant);
+    
+    // Show title overlay
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setTitleText(newTitle);
+    setShowTitle(true);
+    timeoutRef.current = setTimeout(() => {
+      setShowTitle(false);
+    }, 1000);
   };
 
   return (
     <div
       onClick={handleClick}
-      className="cursor-pointer transition-transform active:scale-[0.99]"
-      title="Click to switch network style"
+      className="relative cursor-pointer transition-transform active:scale-[0.99]"
+      title="Click to switch particle mode"
     >
-      {variant === 0 ? <NetworkParticles /> : <ActiveNetworkParticles />}
+      {variant === 0 ? <DriftParticles /> : <HazeParticles />}
+      
+      {/* Transient title overlay */}
+      {showTitle && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none animate-pulse">
+          <p className="text-sm font-medium text-white/80 bg-black/40 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-lg">
+            {titleText}
+          </p>
+        </div>
+      )}
     </div>
   );
 };

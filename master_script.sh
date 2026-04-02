@@ -628,6 +628,76 @@ def get_update_status():
         return os.environ.get('UPDATE_STATUS', 'Current')
 
 # -------------------------------
+# Memory Details (in MB)
+# -------------------------------
+def get_memory_details():
+    """Return memory details in MB from /proc/meminfo"""
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            meminfo = {}
+            for line in f:
+                parts = line.split(':')
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip().split()[0]
+                    meminfo[key] = int(value) / 1024  # KB to MB
+        total = meminfo.get('MemTotal', 0)
+        available = meminfo.get('MemAvailable', total)
+        used = total - available
+        return {
+            'total': round(total),
+            'used': round(used),
+            'free': round(available)
+        }
+    except:
+        return {'total': 0, 'used': 0, 'free': 0}
+
+# -------------------------------
+# Disk Details (in MB)
+# -------------------------------
+def get_disk_details():
+    """Return disk details in MB for root partition"""
+    try:
+        import os
+        stat = os.statvfs('/')
+        total = (stat.f_blocks * stat.f_frsize) / (1024 * 1024)
+        free = (stat.f_bfree * stat.f_frsize) / (1024 * 1024)
+        used = total - free
+        return {
+            'total': round(total),
+            'used': round(used),
+            'available': round(free)
+        }
+    except:
+        return {'total': 0, 'used': 0, 'available': 0}
+
+# -------------------------------
+# CPU Info (cores, frequency, usage)
+# -------------------------------
+def get_cpu_info():
+    """Return CPU cores, frequency (if available), and usage percentage"""
+    cores = 1
+    freq = None
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            cores = f.read().count('processor')
+        # Get frequency from first core (cpu MHz)
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if 'cpu MHz' in line:
+                    freq = float(line.split(':')[1].strip())
+                    break
+    except:
+        pass
+    # Usage already in CPU_USAGE env var (as integer)
+    usage = float(os.environ.get('CPU_USAGE', '0'))
+    return {
+        'cores': cores,
+        'frequency': f"{freq:.0f} MHz" if freq else None,
+        'usage': usage
+    }
+
+# -------------------------------
 # Cost Estimation Helper
 # -------------------------------
 # Detects cloud provider, looks up hourly rate, adjusts for usage, adds storage
@@ -780,6 +850,23 @@ if quotes and len(quotes) > 0:
 quote = random.choice(quotes)
 
 # -------------------------------
+# BANNER TITLE FIXME
+# -------------------------------
+# Region from zone (strip last character)
+zone = os.environ.get('ZONE', 'unknown')
+region = zone[:-2] if len(zone) > 2 else 'unknown'
+
+# Collect detailed resources
+memory_details = get_memory_details()
+disk_details = get_disk_details()
+cpu_info = get_cpu_info()
+load_avg = get_load_average()
+
+# IPs (already exported)
+internal_ip = os.environ.get('INTERNAL_IP', 'unknown')
+public_ip = os.environ.get('PUBLIC_IP', 'unknown')
+
+# -------------------------------
 # Generate Sample Logs
 # -------------------------------
 # Creates mock application logs with timestamps and levels
@@ -854,7 +941,34 @@ data = {
     "quote": quote,
     "logs": logs,
     "resourceTable": resource_table,
-    "systemLoad": get_load_average()
+    "systemLoad": get_load_average(),  # <-- Added missing comma
+    "identity": {                      # <-- Fixed indentation
+        "project": os.environ.get('PROJECT_ID', 'unknown'),
+        "instanceId": os.environ.get('INSTANCE_ID', 'unknown'),
+        "hostname": os.environ.get('HOSTNAME_VM', 'unknown'),
+        "machineType": os.environ.get('MACHINE_TYPE', 'unknown')
+    },
+    "network": {
+        "vpc": "default",
+        "subnet": f"{region}-subnet",
+        "internalIp": internal_ip,
+        "externalIp": public_ip
+    },
+    "location": {
+        "region": region,
+        "zone": zone,
+        "uptime": os.environ.get("UPTIME", "unknown"),
+        "loadAvg": f"{load_avg:.2f}"
+    },
+    "systemResources": {
+        "memory": memory_details,
+        "disk": disk_details,
+        "cpu": cpu_info,
+        "endpoints": {
+            "healthz": "/healthz",
+            "metadata": "/metadata"
+        }
+    }
 }
 
 # -------------------------------
