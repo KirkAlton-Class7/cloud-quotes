@@ -235,16 +235,16 @@ log "Setting up photo gallery"
 # Create images directory
 mkdir -p "${DATA_DIR}/images"
 
-# Copy images from repo root/images to data directory (force overwrite)
+# Copy images from repo root/images to data directory
 if [ -d "$REPO_DIR/images" ]; then
-    cp -rf "$REPO_DIR/images/"* "${DATA_DIR}/images/" 2>/dev/null && log "Images copied successfully" || log "No images found in repo/images"
+    cp -r "$REPO_DIR/images/"* "${DATA_DIR}/images/" 2>/dev/null && log "Images copied successfully" || log "No images found in repo/images"
 else
     log "Images directory not found in repo"
 fi
 
-# Copy images.json from repo root to data directory (force overwrite)
+# Copy images.json from repo root to data directory
 if [ -f "$REPO_DIR/images.json" ]; then
-    cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json" && log "Images metadata copied successfully"
+    cp "$REPO_DIR/images.json" "${DATA_DIR}/images.json" && log "Images metadata copied successfully"
 else
     log "images.json not found in repo root"
 fi
@@ -256,7 +256,7 @@ chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 # Also ensure images are in the deployed dashboard directory (optional)
 if [ -d "$REPO_DIR/images" ]; then
     mkdir -p "${APP_DIR}/data/images"
-    cp -rf "$REPO_DIR/images/"* "${APP_DIR}/data/images/" 2>/dev/null || true
+    cp -r "$REPO_DIR/images/"* "${APP_DIR}/data/images/" 2>/dev/null || true
 fi
 
 # -------------------------------
@@ -1046,9 +1046,9 @@ def get_update_status():
     except:
         return "Current"
 
-# ----------------------
-# Cost Estimation Helper
-# ----------------------
+# -------------------------------
+# Cost Estimation Helper (Full Version)
+# -------------------------------
 # Detects cloud provider, looks up hourly rate, adjusts for usage, adds storage
 
 def get_cost_estimate():
@@ -1362,7 +1362,6 @@ DEPLOY_CMD="*/15 * * * * bash -c '
 LOCK_FILE=/tmp/dashboard.lock
 REPO_DIR=/opt/cloud-quotes
 APP_DIR=/var/www/devsecops-sandbox
-DATA_DIR=${DATA_DIR}
 TMP_DIR=/tmp/dashboard-build
 
 # Prevent concurrent runs
@@ -1391,17 +1390,6 @@ if [ \"\$LOCAL\" != \"\$REMOTE\" ]; then
   # Pull latest code
   git pull || exit 1
   cd \$REPO_DIR/dashboard || exit 1
-
-  # --- Copy latest images and metadata (force overwrite) ---
-  if [ -d \"\$REPO_DIR/images\" ]; then
-    cp -rf \"\$REPO_DIR/images/\"* \"\$DATA_DIR/images/\" 2>/dev/null
-  fi
-  if [ -f \"\$REPO_DIR/images.json\" ]; then
-    cp -f \"\$REPO_DIR/images.json\" \"\$DATA_DIR/images.json\" 2>/dev/null
-  fi
-  chown -R ${APP_USER}:${APP_USER} \"\$DATA_DIR/images\" 2>/dev/null || true
-  chmod -R 755 \"\$DATA_DIR/images\" 2>/dev/null || true
-  # ---------------------------------------------------------
 
   # Install dependencies and build
   if ! npm ci 2>/dev/null; then
