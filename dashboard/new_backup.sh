@@ -361,6 +361,43 @@ def get_cpu_info():
         'usage': float(os.environ.get('CPU_USAGE', '0'))
     }
 
+
+  def get_cost():
+      """
+      Estimate running cost based on machine type and uptime.
+      Returns a string like "$1.23".
+      """
+      # 1. Get machine type (e.g., "projects/123/machineTypes/e2-micro")
+      machine_type = os.environ.get('MACHINE_TYPE', 'unknown')
+      # Extract the short name (after the last '/')
+      short_type = machine_type.split('/')[-1] if '/' in machine_type else machine_type
+
+      # 2. Get uptime in seconds from /proc/uptime
+      try:
+          with open('/proc/uptime', 'r') as f:
+              uptime_sec = float(f.read().split()[0])
+      except:
+          uptime_sec = 0
+
+      hours_running = uptime_sec / 3600.0
+
+      # 3. Hourly rates (USD) – adjust as needed; these are approximate for us-central1
+      #    For exact rates, check GCP pricing or use a public API.
+      rates = {
+          'e2-micro': 0.0076,      # ~$5.50/month
+          'e2-small': 0.0150,      # ~$10.80/month
+          'e2-medium': 0.0301,     # ~$21.60/month
+          'n1-standard-1': 0.0475,
+          'n1-standard-2': 0.0950,
+          'n2-standard-2': 0.0972,
+          'c2-standard-4': 0.2866,
+          # Add more as needed
+      }
+      rate = rates.get(short_type, 0.02)  # fallback to 2¢/hour if unknown
+
+      cost = rate * hours_running
+      return f"${cost:.2f}"
+
 # Load quotes
 quotes = []
 try:
@@ -393,7 +430,7 @@ data = {
         {"label": "CPU", "value": f"{os.environ.get('CPU_USAGE', '0')}%", "status": status(os.environ.get('CPU_USAGE', '0'))},
         {"label": "Memory", "value": f"{os.environ.get('MEM_PERCENT', '0')}%", "status": status(os.environ.get('MEM_PERCENT', '0'))},
         {"label": "Disk", "value": os.environ.get('DISK_PERCENT', '0%'), "status": status(os.environ.get('DISK_PERCENT', '0').replace('%', ''))},
-        {"label": "Network", "value": get_network_info(), "status": "healthy"}
+        { label: "Cost", value:get_cost(), status: "info" },
     ],
     "vmInformation": [
         {"label": "Hostname", "value": os.environ.get('HOSTNAME_VM', 'unknown')},
