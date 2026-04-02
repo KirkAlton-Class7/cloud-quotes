@@ -420,6 +420,14 @@ if [ -f "${ACTIVE_QUOTES}" ] && grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
     fi
 fi
 
+# Sets GITHUB_QUOTES_SYNC to failed if sync unsuccesful
+if [ -f "${ACTIVE_QUOTES}" ] && ! grep -q "Nietzsche" "${ACTIVE_QUOTES}"; then
+    GITHUB_QUOTES_SYNC="Successful"
+else
+    GITHUB_QUOTES_SYNC="Failed"
+fi
+export GITHUB_QUOTES_SYNC
+
 # -------------------------------
 # Build Dashboard
 # -------------------------------
@@ -814,7 +822,7 @@ import urllib.request
 import json
 
 quotes = []
-github_url = "https://raw.githubusercontent.com/KirkAlton-Class7/cloud-quotes/main/quotes.json"
+github_url = os.environ.get('GITHUB_QUOTES_URL', 'https://raw.githubusercontent.com/KirkAlton-Class7/devsecops-vm-dashboard/main/quotes.json')
 
 print("Fetching quotes directly from GitHub...")
 
@@ -825,9 +833,9 @@ try:
         print(f"Successfully fetched {len(quotes)} quotes from GitHub")
         
         # Save to file for cache
-        with open("${DATA_DIR}/quotes.json", "w") as f:
+        with open("/var/www/devsecops-sandbox/data/quotes.json", "w") as f:
             json.dump(quotes, f, indent=2)
-        with open("${DATA_DIR}/quotes_local.json", "w") as f:
+        with open("/var/www/devsecops-sandbox/data/quotes_local.json", "w") as f:
             json.dump(quotes, f, indent=2)
             
 except Exception as e:
