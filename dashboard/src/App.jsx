@@ -173,6 +173,14 @@ export default function App() {
             <LocationCard location={dashboard.location || {}} />
           </motion.section>
 
+          {/* System Resources - Enhanced Resource View */}
+          <motion.section 
+            className="grid grid-cols-1 gap-6"
+            variants={itemVariants}
+          >
+            <SystemResourcesCard resources={dashboard.systemResources || {}} />
+          </motion.section>
+
           {/* Services Status */}
           <motion.section 
             className="grid grid-cols-1 gap-6"
@@ -183,14 +191,6 @@ export default function App() {
               subtitle="Application and bootstrap health"
               items={dashboard.services || []}
             />
-          </motion.section>
-
-          {/* System Resources - Enhanced Resource View */}
-          <motion.section 
-            className="grid grid-cols-1 gap-6"
-            variants={itemVariants}
-          >
-            <SystemResourcesCard resources={dashboard.systemResources || {}} />
           </motion.section>
 
           {/* Application Logs */}
