@@ -3,11 +3,6 @@ import { useState, useEffect } from "react";
 import { RefreshCw, Heart, ChevronLeft, ChevronRight, ImageOff, Plane, X } from "lucide-react";
 import Card from "./Card";
 
-const galleryImages = [
-  // ... your existing images array
-];
-
-// Shuffle function
 const shuffleArray = (array) => {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -24,6 +19,7 @@ export default function ImageGallery() {
   const [imageError, setImageError] = useState(false);
   const [shuffledImages, setShuffledImages] = useState([]);
   const [showBookModal, setShowBookModal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Load liked image IDs from localStorage
   useEffect(() => {
@@ -33,14 +29,27 @@ export default function ImageGallery() {
     }
   }, []);
 
-  // Shuffle images on component mount
+  // Fetch images.json from the backend
   useEffect(() => {
-    setShuffledImages(shuffleArray(galleryImages));
+    fetch('/data/images.json')
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to load images.json');
+        return response.json();
+      })
+      .then(images => {
+        setShuffledImages(shuffleArray(images));
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error loading images:', err);
+        setLoading(false);
+      });
   }, []);
 
   const currentImage = shuffledImages[currentIndex];
   const imageUrl = currentImage ? `/data/images/${currentImage.filename}` : "";
 
+  // Handlers
   const handleRefresh = () => {
     if (!shuffledImages.length) return;
     setIsRefreshing(true);
@@ -76,9 +85,13 @@ export default function ImageGallery() {
 
   const isLiked = currentImage ? likedImageIds.includes(currentImage.id) : false;
 
-  // Get unique liked locations from the full images list
   const likedLocations = () => {
-    const likedImages = galleryImages.filter(img => likedImageIds.includes(img.id));
+    // Use the full images list (not shuffled) to get locations of liked images
+    // We need the original images array – we can fetch it again or store it separately.
+    // For simplicity, we'll use shuffledImages, but note that it's shuffled.
+    // A better approach is to store the original images array in a separate state.
+    // Since we don't have the original here, we'll assume shuffledImages contains all images.
+    const likedImages = shuffledImages.filter(img => likedImageIds.includes(img.id));
     const unique = {};
     likedImages.forEach(img => {
       if (!unique[img.location]) {
@@ -89,12 +102,11 @@ export default function ImageGallery() {
   };
 
   const openGoogleTravel = (location) => {
-    // Encode the location for URL
     const url = `https://www.google.com/travel/explore?q=${encodeURIComponent(location)}`;
     window.open(url, '_blank');
   };
 
-  if (!shuffledImages.length) {
+  if (loading) {
     return (
       <Card title="Scenes from Around the World" subtitle="Where will you go next?">
         <div className="flex items-center justify-center h-64">
@@ -102,6 +114,16 @@ export default function ImageGallery() {
             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-cyan-500 to-purple-600 blur-xl animate-pulse"></div>
             <div className="relative animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-400"></div>
           </div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (!shuffledImages.length) {
+    return (
+      <Card title="Scenes from Around the World" subtitle="Where will you go next?">
+        <div className="flex items-center justify-center h-64 text-slate-400">
+          <p>No images found. Check that images.json exists in /data/.</p>
         </div>
       </Card>
     );
@@ -138,15 +160,12 @@ export default function ImageGallery() {
                   </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                
-                {/* Image Info Overlay - Only location */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
                   <p className="text-sm text-white/80">{currentImage.location}</p>
                 </div>
               </motion.div>
             </AnimatePresence>
 
-            {/* Navigation Buttons */}
             {shuffledImages.length > 1 && (
               <>
                 <button
@@ -165,7 +184,6 @@ export default function ImageGallery() {
             )}
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center justify-between mt-4">
             <div className="flex gap-2">
               <motion.button
@@ -206,7 +224,6 @@ export default function ImageGallery() {
         </Card>
       </motion.div>
 
-      {/* Book Your Next Flight Modal */}
       <AnimatePresence>
         {showBookModal && (
           <motion.div

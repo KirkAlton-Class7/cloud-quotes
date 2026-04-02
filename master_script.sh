@@ -1256,7 +1256,6 @@ data = {
         {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
         {"label": "Memory", "value": f"{mem_percent}%", "status": status(mem_percent)},
         {"label": "Disk", "value": disk_percent, "status": status(disk_percent.replace('%', ''))},
-        {"label": "Network", "value": network_info, "status": "healthy"},
         {"label": "Cost", "value": get_cost_estimate(), "status": "info"}
     ],
     "vmInformation": [
