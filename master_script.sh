@@ -6,10 +6,10 @@
 # Edit these values to customize your dashboard
 
 # App name shown in the header (top left)
-DASHBOARD_APP_NAME="GCP - Week 3"
+DASHBOARD_APP_NAME="GCP Deployment"
 
 # Tagline shown below the app name
-DASHBOARD_TAGLINE="Real-time infrastructure monitoring"
+DASHBOARD_TAGLINE="Infrastructure health and activity"
 
 # User name shown in the sidebar
 DASHBOARD_USER="Kirk Alton"
@@ -36,7 +36,7 @@ APP_USER="appuser"
 # Application Paths
 # -------------------------------
 # Where the dashboard files are stored on the VM
-APP_NAME="devsecops-sandbox"
+APP_NAME="vm-dashboard"
 APP_DIR="/var/www/${APP_NAME}"
 NGINX_SITE="/etc/nginx/sites-available/${APP_NAME}"
 DATA_DIR="${APP_DIR}/data"
@@ -186,7 +186,7 @@ chmod -R 755 "${APP_DIR}"
 # --------------------------------
 
 log "Cloning dashboard repo from ${REPO_URL}"
-REPO_DIR="/opt/cloud-quotes"
+REPO_DIR="/opt/${APP_NAME}"
 
 if [ ! -d "$REPO_DIR" ]; then
   retry git clone "$REPO_URL" "$REPO_DIR"
@@ -194,6 +194,31 @@ fi
 
 cd "$REPO_DIR" && git pull
 chown -R ${APP_USER}:${APP_USER} "$REPO_DIR"
+
+# -------------------------------
+# Copy all utility scripts from repo
+# -------------------------------
+mkdir -p /opt/scripts
+if [ -d "$REPO_DIR/scripts" ]; then
+    cp -rf "$REPO_DIR/scripts/"* /opt/scripts/ 2>/dev/null
+    chmod +x /opt/scripts/*.py /opt/scripts/*.sh 2>/dev/null
+    log "All scripts copied to /opt/scripts"
+else
+    log "No scripts directory found in repo"
+fi
+
+# -------------------------------
+# Enable fetch pricing script
+# -------------------------------
+# Make fetch_pricing.py executable and run it once
+if [ -f "/opt/scripts/fetch_pricing.py" ]; then
+    chmod +x /opt/scripts/fetch_pricing.py
+    export DATA_DIR
+    /opt/scripts/fetch_pricing.py
+    log "Initial pricing cache generated"
+else
+    log "No fetch_pricing.py found in repo"
+fi
 
 # -------------------------------
 # Quotes (local fallback + cache)
@@ -223,12 +248,20 @@ EOF
 # -------------------------------
 
 log "Setting up cron job to refresh quotes"
-CRON_CMD="*/10 * * * * curl -fsSL ${GITHUB_QUOTES_URL} -o ${DATA_DIR}/quotes.json.tmp && mv ${DATA_DIR}/quotes.json.tmp ${DATA_DIR}/quotes.json && cp ${DATA_DIR}/quotes.json ${DATA_DIR}/quotes_local.json >> /var/log/quotes-cron.log 2>&1 # cloud-quotes-sync"
-(crontab -l 2>/dev/null | grep -v 'cloud-quotes-sync'; echo "$CRON_CMD") | crontab -
+CRON_CMD="*/10 * * * * curl -fsSL ${GITHUB_QUOTES_URL} -o ${DATA_DIR}/quotes.json.tmp && mv ${DATA_DIR}/quotes.json.tmp ${DATA_DIR}/quotes.json && cp ${DATA_DIR}/quotes.json ${DATA_DIR}/quotes_local.json >> /var/log/quotes-cron.log 2>&1 # vm-dashboard-sync"
+(crontab -l 2>/dev/null | grep -v 'vm-dashboard-sync'; echo "$CRON_CMD") | crontab -
+
+# -------------------------------
+# Pricing Cache Cron (monthly)
+# -------------------------------
+log "Setting up pricing cache cron job"
+(crontab -l 2>/dev/null | grep -v 'fetch_pricing.py'; echo "0 3 1 * * export DATA_DIR=/var/www/vm-dashboard/data && /opt/scripts/fetch_pricing.py >> /var/log/pricing-cron.log 2>&1") | crontab -
+log "Pricing cache cron job configured (monthly)"
 
 # ---------------------------------------
-# Photo Gallery Images (from repo images)
+# Generate Photo Gallery Images (from repo images)
 # ---------------------------------------
+# This now dynamically generates images.json from the actual image files
 
 log "Setting up photo gallery"
 
@@ -242,12 +275,33 @@ else
     log "Images directory not found in repo"
 fi
 
-# Copy images.json from repo root to data directory (force overwrite)
-if [ -f "$REPO_DIR/images.json" ]; then
-    cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json" && log "Images metadata copied successfully"
-else
-    log "images.json not found in repo root"
-fi
+# Export for Python
+export DATA_DIR
+
+# Generate images.json dynamically from the actual files in DATA_DIR/images
+python3 << 'PYTHON_SCRIPT'
+import json, os
+
+data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
+img_dir = f"{data_dir}/images"
+images = []
+extensions = ('.jpg', '.jpeg', '.png', '.webp')
+for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
+    if fname.lower().endswith(extensions):
+        name_parts = fname.replace('_', ' ').split('.')[0].title()
+        location = name_parts.split()[0] if ' ' in name_parts else name_parts
+        images.append({
+            "id": idx,
+            "filename": fname,
+            "title": name_parts,
+            "location": location,
+            "photographer": "VM Gallery",
+            "tags": ["travel", "nature"]
+        })
+with open(f"{data_dir}/images.json", "w") as f:
+    json.dump(images, f, indent=2)
+print(f"Generated images.json with {len(images)} images")
+PYTHON_SCRIPT
 
 # Set proper permissions
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
@@ -326,6 +380,14 @@ export HOSTNAME_VM INSTANCE_ID ZONE MACHINE_TYPE OS_NAME PROJECT_ID INTERNAL_IP 
 export NGINX_STATUS PYTHON_STATUS STARTUP_STATUS METADATA_STATUS HTTP_STATUS GITHUB_QUOTES_SYNC
 export FIREWALL_STATUS SSH_STATUS UPDATE_STATUS UPTIME BOOTSTRAP_PACKAGES_JSON
 export CPU_USAGE MEM_PERCENT DISK_PERCENT RX_BYTES TX_BYTES
+
+# Additional exports for the refresh script (quoted heredoc safety)
+export APP_NAME
+export APP_DIR
+export DATA_DIR
+export APP_USER
+export GITHUB_QUOTES_URL
+export UPDATES
 
 # --------------------
 # Fetch GitHub Quotes
@@ -753,9 +815,9 @@ try:
         print(f"Successfully fetched {len(quotes)} quotes from GitHub")
         
         # Save to file for cache
-        with open("/var/www/devsecops-sandbox/data/quotes.json", "w") as f:
+        with open("/var/www/${APP_NAME}/data/quotes.json", "w") as f:
             json.dump(quotes, f, indent=2)
-        with open("/var/www/devsecops-sandbox/data/quotes_local.json", "w") as f:
+        with open("/var/www/${APP_NAME}/data/quotes_local.json", "w") as f:
             json.dump(quotes, f, indent=2)
             
 except Exception as e:
@@ -778,7 +840,7 @@ if quotes and len(quotes) > 0:
 quote = random.choice(quotes)
 
 # -------------------------------
-# BANNER TITLE FIXME
+# Collect System Metadata
 # -------------------------------
 # Region from zone (strip last character)
 zone = os.environ.get('ZONE', 'unknown')
@@ -869,8 +931,8 @@ data = {
     "quote": quote,
     "logs": logs,
     "resourceTable": resource_table,
-    "systemLoad": get_load_average(),  # <-- Added missing comma
-    "identity": {                      # <-- Fixed indentation
+    "systemLoad": get_load_average(),
+    "identity": {
         "project": os.environ.get('PROJECT_ID', 'unknown'),
         "instanceId": os.environ.get('INSTANCE_ID', 'unknown'),
         "hostname": os.environ.get('HOSTNAME_VM', 'unknown'),
@@ -928,24 +990,56 @@ cat > /opt/refresh-dashboard-data.py << 'EOF'
 import json, os, random
 from datetime import datetime, timedelta
 
-# -------------------------------
-# Status Helper
-# -------------------------------
-# Determines if a metric value is "healthy" or "warning"
+# ------------------------------------------------------------
+# Read all required environment variables (safe for quoted heredoc)
+# ------------------------------------------------------------
+APP_NAME = os.environ.get('APP_NAME', 'vm-dashboard')
+DATA_DIR = os.environ.get('DATA_DIR', f'/var/www/{APP_NAME}/data')
 
+DASHBOARD_APP_NAME = os.environ.get('DASHBOARD_APP_NAME', 'Custom Application')
+DASHBOARD_TAGLINE = os.environ.get('DASHBOARD_TAGLINE', 'Real-time infrastructure monitoring')
+DASHBOARD_USER = os.environ.get('DASHBOARD_USER', 'Dashboard User')
+DASHBOARD_NAME = os.environ.get('DASHBOARD_NAME', 'DevSecOps Dashboard')
+
+HOSTNAME_VM = os.environ.get('HOSTNAME_VM', 'unknown')
+INSTANCE_ID = os.environ.get('INSTANCE_ID', 'unknown')
+ZONE = os.environ.get('ZONE', 'unknown')
+MACHINE_TYPE = os.environ.get('MACHINE_TYPE', 'unknown')
+PROJECT_ID = os.environ.get('PROJECT_ID', 'unknown')
+OS_NAME = os.environ.get('OS_NAME', 'Debian 12')
+INTERNAL_IP = os.environ.get('INTERNAL_IP', 'unknown')
+PUBLIC_IP = os.environ.get('PUBLIC_IP', 'unknown')
+UPTIME = os.environ.get('UPTIME', 'unknown')
+
+NGINX_STATUS = os.environ.get('NGINX_STATUS', 'Running')
+PYTHON_STATUS = os.environ.get('PYTHON_STATUS', 'Installed')
+METADATA_STATUS = os.environ.get('METADATA_STATUS', 'Reachable')
+HTTP_STATUS = os.environ.get('HTTP_STATUS', 'Serving')
+STARTUP_STATUS = os.environ.get('STARTUP_STATUS', 'Completed')
+GITHUB_QUOTES_SYNC = os.environ.get('GITHUB_QUOTES_SYNC', 'Successful')
+FIREWALL_STATUS = os.environ.get('FIREWALL_STATUS', 'Not installed')
+SSH_STATUS = os.environ.get('SSH_STATUS', 'active')
+UPDATE_STATUS = os.environ.get('UPDATE_STATUS', 'Current')
+UPDATES = os.environ.get('UPDATES', '0')
+
+# Metrics will be refreshed by system calls in this script
+# (the env values are just fallbacks)
+CPU_USAGE_ENV = os.environ.get('CPU_USAGE', '0')
+MEM_PERCENT_ENV = os.environ.get('MEM_PERCENT', '0')
+DISK_PERCENT_ENV = os.environ.get('DISK_PERCENT', '0%')
+RX_BYTES_ENV = os.environ.get('RX_BYTES', '0')
+TX_BYTES_ENV = os.environ.get('TX_BYTES', '0')
+
+# ------------------------------------------------------------
+# Helper functions (same as before, but using env where needed)
+# ------------------------------------------------------------
 def status(val, warn=70):
     try:
         return "warning" if float(val) > warn else "healthy"
     except:
         return "healthy"
 
-# -------------------------------
-# Network Info Helper
-# -------------------------------
-# Converts raw byte counts to human-readable MB format
-
 def get_network_info():
-    """Get detailed network information in human readable format"""
     try:
         rx_bytes = int(os.environ.get('RX_BYTES', '0'))
         tx_bytes = int(os.environ.get('TX_BYTES', '0'))
@@ -955,13 +1049,7 @@ def get_network_info():
     except:
         return os.environ.get('RX_BYTES', '0') + " / " + os.environ.get('TX_BYTES', '0')
 
-# -------------------------------
-# IP Helpers
-# -------------------------------
-# Fetch internal and public IP addresses with fallbacks
-
 def get_internal_ip():
-    """Get internal IP from metadata or hostname"""
     try:
         import subprocess
         result = subprocess.run(
@@ -973,7 +1061,6 @@ def get_internal_ip():
             return result.stdout.strip()
     except:
         pass
-    
     try:
         result = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=2)
         if result.returncode == 0 and result.stdout:
@@ -983,7 +1070,6 @@ def get_internal_ip():
     return "unknown"
 
 def get_public_ip():
-    """Get public IP from metadata or ifconfig.me"""
     try:
         import subprocess
         result = subprocess.run(
@@ -995,7 +1081,6 @@ def get_public_ip():
             return result.stdout.strip()
     except:
         pass
-    
     try:
         import urllib.request
         with urllib.request.urlopen('http://ifconfig.me', timeout=5) as response:
@@ -1003,11 +1088,6 @@ def get_public_ip():
     except:
         pass
     return "unknown"
-
-# -------------------------------
-# Load Average Helper
-# -------------------------------
-# Reads 1-minute load average from /proc/loadavg
 
 def get_load_average():
     try:
@@ -1017,21 +1097,11 @@ def get_load_average():
     except:
         return 0.0
 
-# -------------------------------
-# SSH Status Helper
-# -------------------------------
-# Returns formatted SSH status
-
 def get_ssh_status():
     ssh_active = os.environ.get('SSH_STATUS', 'active')
     if ssh_active.lower() == 'active':
         return "Enabled (22/tcp)"
     return "Disabled"
-
-# -------------------------------
-# Update Status Helper
-# -------------------------------
-# Returns number of pending security updates
 
 def get_update_status():
     updates = os.environ.get('UPDATES', '0')
@@ -1046,23 +1116,16 @@ def get_update_status():
     except:
         return "Current"
 
-# ----------------------
-# Cost Estimation Helper
-# ----------------------
-# Detects cloud provider, looks up hourly rate, adjusts for usage, adds storage
-
 def get_cost_estimate():
+    # Your existing cost estimation logic (unchanged)
     try:
         machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
-        
         try:
             cpu = float(os.environ.get('CPU_USAGE', '0'))
             mem = float(os.environ.get('MEM_PERCENT', '0'))
         except:
             cpu = 0
             mem = 0
-        
-        # Detect cloud provider
         provider = "unknown"
         try:
             import subprocess
@@ -1075,7 +1138,6 @@ def get_cost_estimate():
                 provider = "gcp"
         except:
             pass
-        
         if provider == "unknown":
             try:
                 aws_check = subprocess.run(
@@ -1086,7 +1148,6 @@ def get_cost_estimate():
                     provider = "aws"
             except:
                 pass
-        
         if provider == "unknown":
             try:
                 azure_check = subprocess.run(
@@ -1098,8 +1159,6 @@ def get_cost_estimate():
                     provider = "azure"
             except:
                 pass
-        
-        # Parse machine size
         machine_size = "micro"
         if "micro" in machine_type:
             machine_size = "micro"
@@ -1109,76 +1168,62 @@ def get_cost_estimate():
             machine_size = "medium"
         elif "large" in machine_type:
             machine_size = "large"
-        
         pricing = {
             "gcp": {"micro": 0.012, "small": 0.025, "medium": 0.050, "large": 0.100},
             "aws": {"micro": 0.0116, "small": 0.023, "medium": 0.046, "large": 0.092},
             "azure": {"micro": 0.012, "small": 0.024, "medium": 0.048, "large": 0.096}
         }
-        
         if provider in pricing and machine_size in pricing[provider]:
             base_hourly = pricing[provider][machine_size]
         elif provider in pricing:
             base_hourly = pricing[provider]["micro"]
         else:
             base_hourly = 0.015
-        
         cpu_multiplier = min(max(cpu / 100, 0.1), 1.0)
         mem_multiplier = min(max(mem / 100, 0.1), 1.0)
         usage_factor = (cpu_multiplier + mem_multiplier) / 2
-        
         monthly_cost = base_hourly * 720 * usage_factor
         storage_cost = 1.00
         total_monthly = monthly_cost + storage_cost
-        
         provider_names = {"gcp": "GCP", "aws": "AWS", "azure": "Azure"}
         provider_display = provider_names.get(provider, "")
         machine_display = machine_type.replace('-', ' ').replace('_', ' ').title()
-        
         if provider_display:
             return f"${total_monthly:.2f}/month ({provider_display} {machine_display})"
         else:
             return f"${total_monthly:.2f}/month (est.)"
-            
-    except Exception as e:
+    except Exception:
         machine_type = os.environ.get('MACHINE_TYPE', 'standard')
         return f"Based on {machine_type} usage"
 
-# -------------------------------
-# Collect System Metrics
-# -------------------------------
-# Grabs current CPU, memory, disk, and uptime from the system
-
+# ------------------------------------------------------------
+# Collect fresh metrics (overrides env values)
+# ------------------------------------------------------------
 cpu_usage = os.popen("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf \"%.0f\", usage}'").read().strip() or "0"
 mem_percent = os.popen("free | awk '/Mem:/ {printf(\"%.0f\"), $3/$2 * 100.0}'").read().strip() or "0"
 disk_percent = os.popen("df / | tail -1 | awk '{print $5}'").read().strip() or "0%"
 uptime = os.popen("uptime -p").read().strip() or "up 0 minutes"
 hostname = os.popen("hostname").read().strip() or "unknown"
 
-# Get IPs and network info
 internal_ip = get_internal_ip()
 public_ip = get_public_ip()
 network_info = get_network_info()
 
-# -------------------------------
-# Load Quotes
-# -------------------------------
-# Reads quotes from the cached quotes.json file
-
+# ------------------------------------------------------------
+# Load quotes
+# ------------------------------------------------------------
 quotes = []
 try:
-    with open("/var/www/devsecops-sandbox/data/quotes.json") as f:
+    with open(f"{DATA_DIR}/quotes.json") as f:
         quotes = json.load(f)
     print(f"Loaded {len(quotes)} quotes")
 except:
     quotes = [{"text": "Welcome to DevSecOps!", "author": "System"}]
     print("Using fallback quotes")
 
-# -------------------------------
-# Build Dashboard Data
-# -------------------------------
-# Assembles fresh metrics into the JSON structure
-
+# ------------------------------------------------------------
+# Build dashboard data
+# ------------------------------------------------------------
 data = {
     "summaryCards": [
         {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
@@ -1188,34 +1233,34 @@ data = {
     ],
     "vmInformation": [
         {"label": "Hostname", "value": hostname},
-        {"label": "Instance ID", "value": os.environ.get('INSTANCE_ID', 'unknown')},
-        {"label": "Zone", "value": os.environ.get('ZONE', 'unknown')},
-        {"label": "Machine Type", "value": os.environ.get('MACHINE_TYPE', 'unknown')},
-        {"label": "OS", "value": os.environ.get('OS_NAME', 'Debian 12')},
-        {"label": "Project ID", "value": os.environ.get('PROJECT_ID', 'unknown')},
+        {"label": "Instance ID", "value": INSTANCE_ID},
+        {"label": "Zone", "value": ZONE},
+        {"label": "Machine Type", "value": MACHINE_TYPE},
+        {"label": "OS", "value": OS_NAME},
+        {"label": "Project ID", "value": PROJECT_ID},
         {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
     ],
     "services": [
-        {"label": "Nginx", "value": os.environ.get('NGINX_STATUS', 'Running'), "status": "healthy"},
-        {"label": "Python", "value": os.environ.get('PYTHON_STATUS', 'Installed'), "status": "healthy"},
-        {"label": "Metadata Service", "value": os.environ.get('METADATA_STATUS', 'Reachable'), "status": "healthy"},
-        {"label": "HTTP Service", "value": os.environ.get('HTTP_STATUS', 'Serving'), "status": "healthy"},
-        {"label": "Startup Script", "value": os.environ.get('STARTUP_STATUS', 'Completed'), "status": "healthy"},
-        {"label": "GitHub Quotes Sync", "value": os.environ.get('GITHUB_QUOTES_SYNC', 'Successful'), "status": "healthy"},
+        {"label": "Nginx", "value": NGINX_STATUS, "status": "healthy"},
+        {"label": "Python", "value": PYTHON_STATUS, "status": "healthy"},
+        {"label": "Metadata Service", "value": METADATA_STATUS, "status": "healthy"},
+        {"label": "HTTP Service", "value": HTTP_STATUS, "status": "healthy"},
+        {"label": "Startup Script", "value": STARTUP_STATUS, "status": "healthy"},
+        {"label": "GitHub Quotes Sync", "value": GITHUB_QUOTES_SYNC, "status": "healthy"},
         {"label": "Bootstrap Packages", "value": "nginx, python3, curl, jq, git", "status": "healthy"}
     ],
     "security": [
-        {"label": "Host Firewall", "value": os.environ.get('FIREWALL_STATUS', 'Not installed'), "status": "info"},
+        {"label": "Host Firewall", "value": FIREWALL_STATUS, "status": "info"},
         {"label": "SSH", "value": get_ssh_status(), "status": "healthy"},
         {"label": "Updates", "value": get_update_status(), "status": "info"},
         {"label": "Internal IP", "value": internal_ip, "status": "info"},
         {"label": "Public IP", "value": public_ip, "status": "info"}
     ],
     "meta": {
-        "appName": os.environ.get('DASHBOARD_APP_NAME', 'DevSecOps'),
-        "tagline": os.environ.get('DASHBOARD_TAGLINE', 'Real-time infrastructure monitoring'),
-        "dashboardUser": os.environ.get('DASHBOARD_USER', 'Kirk Alton'),
-        "dashboardName": os.environ.get('DASHBOARD_NAME', 'DevSecOps Dashboard'),
+        "appName": DASHBOARD_APP_NAME,
+        "tagline": DASHBOARD_TAGLINE,
+        "dashboardUser": DASHBOARD_USER,
+        "dashboardName": DASHBOARD_NAME,
         "uptime": uptime
     },
     "quote": random.choice(quotes),
@@ -1227,7 +1272,7 @@ data = {
         {"time": (datetime.now() - timedelta(minutes=30)).strftime("%H:%M:%S"), "level": "info", "scope": "nginx", "message": "Nginx serving dashboard"}
     ],
     "resourceTable": [
-        {"name": "nginx", "type": "service", "scope": "system", "status": os.environ.get('NGINX_STATUS', 'Running')},
+        {"name": "nginx", "type": "service", "scope": "system", "status": NGINX_STATUS},
         {"name": "python3", "type": "runtime", "scope": "system", "status": "Installed"},
         {"name": "nodejs", "type": "runtime", "scope": "system", "status": "Installed"},
         {"name": "quotes.json", "type": "data", "scope": "application", "status": "Active"},
@@ -1236,12 +1281,10 @@ data = {
     "systemLoad": get_load_average()
 }
 
-# -------------------------------
-# Write to File
-# -------------------------------
-# Saves refreshed data to dashboard-data.json
-
-with open("/var/www/devsecops-sandbox/data/dashboard-data.json", "w") as f:
+# ------------------------------------------------------------
+# Write the refreshed data
+# ------------------------------------------------------------
+with open(f"{DATA_DIR}/dashboard-data.json", "w") as f:
     json.dump(data, f, indent=2)
 
 print(f"Dashboard data refreshed - CPU: {cpu_usage}%, Memory: {mem_percent}%, Disk: {disk_percent}")
@@ -1301,6 +1344,11 @@ server {
         alias ${DATA_DIR}/;
         add_header Access-Control-Allow-Origin *;
         add_header Cache-Control "no-store";
+        types {
+            image/webp webp;
+            image/jpeg jpg jpeg;
+            image/png png;
+        }
     }
     
     location / {
@@ -1360,8 +1408,8 @@ log "Setting up dashboard auto-deploy"
 
 DEPLOY_CMD="*/15 * * * * bash -c '
 LOCK_FILE=/tmp/dashboard.lock
-REPO_DIR=/opt/cloud-quotes
-APP_DIR=/var/www/devsecops-sandbox
+REPO_DIR=/opt/${APP_NAME}
+APP_DIR=${APP_DIR}
 DATA_DIR=${DATA_DIR}
 TMP_DIR=/tmp/dashboard-build
 
@@ -1392,13 +1440,39 @@ if [ \"\$LOCAL\" != \"\$REMOTE\" ]; then
   git pull || exit 1
   cd \$REPO_DIR/dashboard || exit 1
 
-  # --- Copy latest images and metadata (force overwrite) ---
+  # Update pricing script (copy from repo if changed, then run)
+  if [ -f \"\$REPO_DIR/scripts/fetch_pricing.py\" ]; then
+      cp -f \"\$REPO_DIR/scripts/fetch_pricing.py\" /opt/scripts/fetch_pricing.py
+      chmod +x /opt/scripts/fetch_pricing.py
+      export DATA_DIR=${DATA_DIR}
+      /opt/scripts/fetch_pricing.py
+  fi
+
+  # --- Copy latest images and regenerate metadata (force overwrite) ---
   if [ -d \"\$REPO_DIR/images\" ]; then
     cp -rf \"\$REPO_DIR/images/\"* \"\$DATA_DIR/images/\" 2>/dev/null
   fi
-  if [ -f \"\$REPO_DIR/images.json\" ]; then
-    cp -f \"\$REPO_DIR/images.json\" \"\$DATA_DIR/images.json\" 2>/dev/null
-  fi
+  # Regenerate images.json dynamically
+  python3 << 'INNER_PY'
+import json, os
+img_dir = \"\$DATA_DIR/images\"
+images = []
+extensions = ('.jpg', '.jpeg', '.png', '.webp')
+for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
+    if fname.lower().endswith(extensions):
+        name_parts = fname.replace('_', ' ').split('.')[0].title()
+        location = name_parts.split()[0] if ' ' in name_parts else name_parts
+        images.append({
+            \"id\": idx,
+            \"filename\": fname,
+            \"title\": name_parts,
+            \"location\": location,
+            \"photographer\": \"VM Gallery\",
+            \"tags\": [\"travel\", \"nature\"]
+        })
+with open(\"\$DATA_DIR/images.json\", \"w\") as f:
+    json.dump(images, f, indent=2)
+INNER_PY
   chown -R ${APP_USER}:${APP_USER} \"\$DATA_DIR/images\" 2>/dev/null || true
   chmod -R 755 \"\$DATA_DIR/images\" 2>/dev/null || true
   # ---------------------------------------------------------

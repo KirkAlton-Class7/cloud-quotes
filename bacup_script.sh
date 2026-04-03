@@ -235,16 +235,16 @@ log "Setting up photo gallery"
 # Create images directory
 mkdir -p "${DATA_DIR}/images"
 
-# Copy images from repo root/images to data directory
+# Copy images from repo root/images to data directory (force overwrite)
 if [ -d "$REPO_DIR/images" ]; then
-    cp -r "$REPO_DIR/images/"* "${DATA_DIR}/images/" 2>/dev/null && log "Images copied successfully" || log "No images found in repo/images"
+    cp -rf "$REPO_DIR/images/"* "${DATA_DIR}/images/" 2>/dev/null && log "Images copied successfully" || log "No images found in repo/images"
 else
     log "Images directory not found in repo"
 fi
 
-# Copy images.json from repo root to data directory
+# Copy images.json from repo root to data directory (force overwrite)
 if [ -f "$REPO_DIR/images.json" ]; then
-    cp "$REPO_DIR/images.json" "${DATA_DIR}/images.json" && log "Images metadata copied successfully"
+    cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json" && log "Images metadata copied successfully"
 else
     log "images.json not found in repo root"
 fi
@@ -256,8 +256,56 @@ chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 # Also ensure images are in the deployed dashboard directory (optional)
 if [ -d "$REPO_DIR/images" ]; then
     mkdir -p "${APP_DIR}/data/images"
-    cp -r "$REPO_DIR/images/"* "${APP_DIR}/data/images/" 2>/dev/null || true
+    cp -rf "$REPO_DIR/images/"* "${APP_DIR}/data/images/" 2>/dev/null || true
 fi
+
+
+# # ---------------------------------------
+# # Photo Gallery Images (from repo images)
+# # ---------------------------------------
+
+# log "Setting up photo gallery"
+
+# # Create images directory
+# mkdir -p "${DATA_DIR}/images"
+
+# # Copy images from repo root/images to data directory (force overwrite)
+# if [ -d "$REPO_DIR/images" ]; then
+#     cp -rf "$REPO_DIR/images/"* "${DATA_DIR}/images/" 2>/dev/null && log "Images copied successfully" || log "No images found in repo/images"
+# else
+#     log "Images directory not found in repo"
+# fi
+
+# # Instead of copying images.json, generate it dynamically from the actual files
+# python3 << PYTHON_SCRIPT
+# import json, os
+
+# img_dir = "${DATA_DIR}/images"
+# images = []
+# extensions = ('.jpg', '.jpeg', '.png', '.webp')
+# for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
+#     if fname.lower().endswith(extensions):
+#         name_parts = fname.replace('_', ' ').split('.')[0].title()
+#         location = name_parts.split()[0] if ' ' in name_parts else name_parts
+#         images.append({
+#             "id": idx,
+#             "filename": fname,
+#             "title": name_parts,
+#             "location": location,
+#             "photographer": "VM Gallery",
+#             "tags": ["travel", "nature"]
+#         })
+
+# with open("${DATA_DIR}/images.json", "w") as f:
+#     json.dump(images, f, indent=2)
+
+# print(f"Generated images.json with {len(images)} images")
+# PYTHON_SCRIPT
+
+# # Set proper permissions
+# chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
+# chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
+
 
 # -------------------------------
 # Metadata
@@ -1046,9 +1094,9 @@ def get_update_status():
     except:
         return "Current"
 
-# -------------------------------
-# Cost Estimation Helper (Full Version)
-# -------------------------------
+# ----------------------
+# Cost Estimation Helper
+# ----------------------
 # Detects cloud provider, looks up hourly rate, adjusts for usage, adds storage
 
 def get_cost_estimate():
@@ -1362,6 +1410,7 @@ DEPLOY_CMD="*/15 * * * * bash -c '
 LOCK_FILE=/tmp/dashboard.lock
 REPO_DIR=/opt/cloud-quotes
 APP_DIR=/var/www/devsecops-sandbox
+DATA_DIR=${DATA_DIR}
 TMP_DIR=/tmp/dashboard-build
 
 # Prevent concurrent runs
@@ -1390,6 +1439,17 @@ if [ \"\$LOCAL\" != \"\$REMOTE\" ]; then
   # Pull latest code
   git pull || exit 1
   cd \$REPO_DIR/dashboard || exit 1
+
+  # --- Copy latest images and metadata (force overwrite) ---
+  if [ -d \"\$REPO_DIR/images\" ]; then
+    cp -rf \"\$REPO_DIR/images/\"* \"\$DATA_DIR/images/\" 2>/dev/null
+  fi
+  if [ -f \"\$REPO_DIR/images.json\" ]; then
+    cp -f \"\$REPO_DIR/images.json\" \"\$DATA_DIR/images.json\" 2>/dev/null
+  fi
+  chown -R ${APP_USER}:${APP_USER} \"\$DATA_DIR/images\" 2>/dev/null || true
+  chmod -R 755 \"\$DATA_DIR/images\" 2>/dev/null || true
+  # ---------------------------------------------------------
 
   # Install dependencies and build
   if ! npm ci 2>/dev/null; then
