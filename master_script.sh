@@ -283,24 +283,34 @@ python3 << 'PYTHON_SCRIPT'
 import json, os
 
 data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
-img_dir = f"{data_dir}/images"
+img_dir = os.path.join(data_dir, 'images')
+if not os.path.isdir(img_dir):
+    print("ERROR: images directory missing, cannot generate images.json")
+    exit(1)
+
 images = []
-extensions = ('.jpg', '.jpeg', '.png', '.webp')
+extensions = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
 for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
     if fname.lower().endswith(extensions):
-        name_parts = fname.replace('_', ' ').split('.')[0].title()
-        location = name_parts.split()[0] if ' ' in name_parts else name_parts
+        # Generate title from filename (remove extension, replace underscores/spaces)
+        title = fname.rsplit('.', 1)[0].replace('_', ' ').title()
+        # Simple location extraction: use the whole title as location
+        location = title
         images.append({
             "id": idx,
             "filename": fname,
-            "title": name_parts,
+            "title": title,
             "location": location,
             "photographer": "VM Gallery",
             "tags": ["travel", "nature"]
         })
-with open(f"{data_dir}/images.json", "w") as f:
+
+# Overwrite any existing images.json
+output_file = os.path.join(data_dir, 'images.json')
+with open(output_file, 'w') as f:
     json.dump(images, f, indent=2)
-print(f"Generated images.json with {len(images)} images")
+
+print(f"Generated images.json with {len(images)} images from {img_dir}")
 PYTHON_SCRIPT
 
 # Set proper permissions
@@ -621,7 +631,7 @@ def get_update_status():
 # Memory Details (in MB)
 # -------------------------------
 def get_memory_details():
-    """Return memory details in MB from /proc/meminfo"""
+    """Return memory details in MB using multiple fallback methods"""
     try:
         with open('/proc/meminfo', 'r') as f:
             meminfo = {}
@@ -629,36 +639,60 @@ def get_memory_details():
                 parts = line.split(':')
                 if len(parts) == 2:
                     key = parts[0].strip()
-                    value = parts[1].strip().split()[0]
-                    meminfo[key] = int(value) / 1024  # KB to MB
+                    val = parts[1].strip().split()[0]
+                    meminfo[key] = int(val) / 1024  # KB -> MB
+        
         total = meminfo.get('MemTotal', 0)
-        available = meminfo.get('MemAvailable', total)
+        # Prefer MemAvailable, else compute from MemFree + Buffers + Cached
+        available = meminfo.get('MemAvailable', 0)
+        if available == 0:
+            free = meminfo.get('MemFree', 0)
+            buffers = meminfo.get('Buffers', 0)
+            cached = meminfo.get('Cached', 0)
+            available = free + buffers + cached
         used = total - available
         return {
             'total': round(total),
             'used': round(used),
             'free': round(available)
         }
-    except:
+    except Exception as e:
+        print(f"Memory error: {e}")
         return {'total': 0, 'used': 0, 'free': 0}
 
 # -------------------------------
 # Disk Details (in MB)
 # -------------------------------
 def get_disk_details():
-    """Return disk details in MB for root partition"""
+    """Return disk details in MB for root partition with fallback"""
     try:
         import os
         stat = os.statvfs('/')
-        total = (stat.f_blocks * stat.f_frsize) / (1024 * 1024)
-        free = (stat.f_bfree * stat.f_frsize) / (1024 * 1024)
+        # Use f_frsize if non-zero, otherwise f_bsize
+        block_size = stat.f_frsize if stat.f_frsize else stat.f_bsize
+        total = (stat.f_blocks * block_size) / (1024 * 1024)
+        free = (stat.f_bfree * block_size) / (1024 * 1024)
         used = total - free
         return {
             'total': round(total),
             'used': round(used),
             'available': round(free)
         }
-    except:
+    except Exception as e:
+        print(f"Disk error: {e}")
+        # Fallback to df command
+        try:
+            import subprocess
+            output = subprocess.check_output(['df', '-BM', '/'], text=True)
+            lines = output.strip().split('\n')
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                total_mb = int(parts[1].rstrip('M'))
+                used_mb = int(parts[2].rstrip('M'))
+                free_mb = int(parts[3].rstrip('M'))
+                return {'total': total_mb, 'used': used_mb, 'available': free_mb}
+        except:
+            pass
         return {'total': 0, 'used': 0, 'available': 0}
 
 # -------------------------------
@@ -687,126 +721,83 @@ def get_cpu_info():
         'usage': usage
     }
 
-# -------------------------------
-# Cost Estimation Helper
-# -------------------------------
-# Detects cloud provider, looks up hourly rate, adjusts for usage, adds storage
+# ----------------
+# Get Hourly Rate
+# ----------------
+def get_hourly_rate():
+    machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
+    machine_short = machine_type.split('/')[-1]
+    rates = {
+        'e2-micro': 0.0076, 'e2-small': 0.0150, 'e2-medium': 0.0301,
+        'n1-standard-1': 0.0475, 'n2-standard-2': 0.0972,
+    }
+    return rates.get(machine_short, 0.01)
 
-def get_cost_estimate():
-    """Estimate cost based on machine type, provider, and actual usage"""
+# -----------------------
+# Cost Estimation Helper
+# -----------------------
+def get_cumulative_cost():
+    """Return cumulative cost across reboots using persistent storage."""
+    cost_file = '/var/tmp/vm-cost.json'
+    hourly_rate = get_hourly_rate()
+    
+    # Get current uptime
     try:
-        machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
-        
-        try:
-            cpu = float(os.environ.get('CPU_USAGE', '0'))
-            mem = float(os.environ.get('MEM_PERCENT', '0'))
-        except (ValueError, TypeError):
-            cpu = 0
-            mem = 0
-        
-        # Detect cloud provider (GCP, AWS, or Azure)
-        provider = "unknown"
-        try:
-            import subprocess
-            
-            # GCP detection
-            gcp_check = subprocess.run(
-                ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google', 
-                 'http://metadata.google.internal/computeMetadata/v1/instance/zone'],
-                capture_output=True, text=True, timeout=2
-            )
-            if gcp_check.returncode == 0 and gcp_check.stdout:
-                provider = "gcp"
-        except:
-            pass
-        
-        # AWS detection
-        if provider == "unknown":
-            try:
-                aws_check = subprocess.run(
-                    ['curl', '-s', '--max-time', '2', 'http://169.254.169.254/latest/meta-data/instance-id'],
-                    capture_output=True, text=True, timeout=2
-                )
-                if aws_check.returncode == 0 and aws_check.stdout:
-                    provider = "aws"
-            except:
-                pass
-        
-        # Azure detection
-        if provider == "unknown":
-            try:
-                azure_check = subprocess.run(
-                    ['curl', '-s', '--max-time', '2', '-H', 'Metadata:true', 
-                     'http://169.254.169.254/metadata/instance?api-version=2017-08-01'],
-                    capture_output=True, text=True, timeout=2
-                )
-                if azure_check.returncode == 0 and azure_check.stdout:
-                    provider = "azure"
-            except:
-                pass
-        
-        # Parse machine size (micro, small, medium, large)
-        machine_size = "micro"
-        if "micro" in machine_type:
-            machine_size = "micro"
-        elif "small" in machine_type:
-            machine_size = "small"
-        elif "medium" in machine_type:
-            machine_size = "medium"
-        elif "large" in machine_type:
-            machine_size = "large"
-        
-        # Hourly rates by provider and size (in USD)
-        pricing = {
-            "gcp": {"micro": 0.012, "small": 0.025, "medium": 0.050, "large": 0.100},
-            "aws": {"micro": 0.0116, "small": 0.023, "medium": 0.046, "large": 0.092},
-            "azure": {"micro": 0.012, "small": 0.024, "medium": 0.048, "large": 0.096}
-        }
-        
-        # Get base hourly rate
-        if provider in pricing and machine_size in pricing[provider]:
-            base_hourly = pricing[provider][machine_size]
-        elif provider in pricing:
-            base_hourly = pricing[provider]["micro"]
-        else:
-            base_hourly = 0.015
-        
-        # Usage factor (0.1 to 1.0, based on CPU and memory)
-        cpu_multiplier = min(max(cpu / 100, 0.1), 1.0)
-        mem_multiplier = min(max(mem / 100, 0.1), 1.0)
-        usage_factor = (cpu_multiplier + mem_multiplier) / 2
-        
-        # Calculate monthly cost (720 hours/month) + $1 storage
-        monthly_cost = base_hourly * 720 * usage_factor
-        storage_cost = 1.00
-        total_monthly = monthly_cost + storage_cost
-        
-        # Format output with provider and machine type
-        provider_names = {"gcp": "GCP", "aws": "AWS", "azure": "Azure"}
-        provider_display = provider_names.get(provider, "")
-        machine_display = machine_type.replace('-', ' ').replace('_', ' ').title()
-        
-        if provider_display:
-            return f"${total_monthly:.2f}/month ({provider_display} {machine_display})"
-        else:
-            return f"${total_monthly:.2f}/month (est.)"
-            
-    except Exception as e:
-        machine_type = os.environ.get('MACHINE_TYPE', 'standard')
-        return f"Based on {machine_type} usage"
+        with open('/proc/uptime', 'r') as f:
+            current_uptime = float(f.read().split()[0])
+    except:
+        current_uptime = 0
+    
+    # Load or initialize persistent data
+    try:
+        with open(cost_file, 'r') as f:
+            data = json.load(f)
+        total_cost = data.get('total_cost', 0.0)
+        last_uptime = data.get('last_uptime_sec', current_uptime)
+    except (FileNotFoundError, json.JSONDecodeError):
+        total_cost = 0.0
+        last_uptime = current_uptime
+    
+    # Handle reboot (uptime decreased)
+    if current_uptime < last_uptime:
+        # Reboot – keep total, reset last_uptime to avoid negative delta
+        last_uptime = current_uptime
+    else:
+        delta_hours = (current_uptime - last_uptime) / 3600.0
+        if delta_hours > 0:
+            incremental = hourly_rate * delta_hours
+            total_cost += incremental
+            last_uptime = current_uptime
+    
+    # Write back updated state
+    with open(cost_file, 'w') as f:
+        json.dump({'total_cost': total_cost, 'last_uptime_sec': last_uptime}, f)
+    
+    # Format output
+    if total_cost < 0.01:
+        return f"${total_cost:.4f} total"
+    elif total_cost < 1:
+        return f"${total_cost:.3f} total"
+    else:
+        return f"${total_cost:.2f} total"
 
 # -------------------------------
 # Load Quotes from GitHub
 # -------------------------------
-# Fetches quotes.json directly from GitHub with local cache fallback
 
 import urllib.request
 import json
+import os
 
 quotes = []
 github_url = os.environ.get('GITHUB_QUOTES_URL', 'https://raw.githubusercontent.com/KirkAlton-Class7/devsecops-vm-dashboard/main/quotes.json')
 
 print("Fetching quotes directly from GitHub...")
+
+# Get data directory from environment
+data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
+quotes_path = os.path.join(data_dir, 'quotes.json')
+local_quotes_path = os.path.join(data_dir, 'quotes_local.json')
 
 try:
     # Fetch directly from GitHub
@@ -815,9 +806,9 @@ try:
         print(f"Successfully fetched {len(quotes)} quotes from GitHub")
         
         # Save to file for cache
-        with open("/var/www/${APP_NAME}/data/quotes.json", "w") as f:
+        with open(quotes_path, "w") as f:
             json.dump(quotes, f, indent=2)
-        with open("/var/www/${APP_NAME}/data/quotes_local.json", "w") as f:
+        with open(local_quotes_path, "w") as f:
             json.dump(quotes, f, indent=2)
             
 except Exception as e:
@@ -825,19 +816,13 @@ except Exception as e:
     
     # Fallback to local file if available
     try:
-        with open("${DATA_DIR}/quotes.json", "r") as f:
+        with open(quotes_path, "r") as f:
             quotes = json.load(f)
         print(f"Loaded {len(quotes)} quotes from local cache")
     except:
         # Ultimate fallback
         quotes = [{"text": "Welcome to DevSecOps!", "author": "System"}]
         print("Using emergency fallback quote")
-
-# Show first quote for verification
-if quotes and len(quotes) > 0:
-    print(f"First quote: {quotes[0].get('text', '')[:60]}...")
-
-quote = random.choice(quotes)
 
 # -------------------------------
 # Collect System Metadata
@@ -894,7 +879,7 @@ data = {
         {"label": "CPU", "value": f"{os.environ.get('CPU_USAGE', '0')}%", "status": status(os.environ.get('CPU_USAGE', '0'))},
         {"label": "Memory", "value": f"{os.environ.get('MEM_PERCENT', '0')}%", "status": status(os.environ.get('MEM_PERCENT', '0'))},
         {"label": "Disk", "value": os.environ.get('DISK_PERCENT', '0%'), "status": status(os.environ.get('DISK_PERCENT', '0').replace('%', ''))},
-        {"label": "Cost", "value": get_cost_estimate(), "status": "info"}
+        {"label": "Cost", "value": get_cumulative_cost(), "status": "info"}
     ],
     "vmInformation": [
         {"label": "Hostname", "value": os.environ.get('HOSTNAME_VM', 'unknown')},
@@ -903,7 +888,7 @@ data = {
         {"label": "Machine Type", "value": os.environ.get('MACHINE_TYPE', 'unknown')},
         {"label": "OS", "value": os.environ.get('OS_NAME', 'unknown')},
         {"label": "Project ID", "value": os.environ.get('PROJECT_ID', 'unknown')},
-        {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
+        {"label": "Estimated Cost (Usage)", "value": get_cumulative_cost(), "status": "info"}
     ],
     "services": [
         {"label": "Nginx", "value": os.environ.get('NGINX_STATUS', 'Unknown'), "status": "healthy"},
@@ -1093,80 +1078,65 @@ def get_update_status():
     except:
         return "Current"
 
-def get_cost_estimate(cpu_usage, mem_percent):
+# ----------------
+# Get Hourly Rate
+# ----------------
+def get_hourly_rate():
+    machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
+    machine_short = machine_type.split('/')[-1]
+    rates = {
+        'e2-micro': 0.0076, 'e2-small': 0.0150, 'e2-medium': 0.0301,
+        'n1-standard-1': 0.0475, 'n2-standard-2': 0.0972,
+    }
+    return rates.get(machine_short, 0.01)
+
+# -----------------------
+# Cost Estimation Helper
+# -----------------------
+def get_cumulative_cost():
+    """Return cumulative cost across reboots using persistent storage."""
+    cost_file = '/var/tmp/vm-cost.json'
+    hourly_rate = get_hourly_rate()
+    
+    # Get current uptime
     try:
-        machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
-        cpu = float(cpu_usage)
-        mem = float(mem_percent)
-        provider = "unknown"
-        try:
-            import subprocess
-            gcp_check = subprocess.run(
-                ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google',
-                 'http://metadata.google.internal/computeMetadata/v1/instance/zone'],
-                capture_output=True, text=True, timeout=2
-            )
-            if gcp_check.returncode == 0 and gcp_check.stdout:
-                provider = "gcp"
-        except:
-            pass
-        if provider == "unknown":
-            try:
-                aws_check = subprocess.run(
-                    ['curl', '-s', '--max-time', '2', 'http://169.254.169.254/latest/meta-data/instance-id'],
-                    capture_output=True, text=True, timeout=2
-                )
-                if aws_check.returncode == 0 and aws_check.stdout:
-                    provider = "aws"
-            except:
-                pass
-        if provider == "unknown":
-            try:
-                azure_check = subprocess.run(
-                    ['curl', '-s', '--max-time', '2', '-H', 'Metadata:true',
-                     'http://169.254.169.254/metadata/instance?api-version=2017-08-01'],
-                    capture_output=True, text=True, timeout=2
-                )
-                if azure_check.returncode == 0 and azure_check.stdout:
-                    provider = "azure"
-            except:
-                pass
-        machine_size = "micro"
-        if "micro" in machine_type:
-            machine_size = "micro"
-        elif "small" in machine_type:
-            machine_size = "small"
-        elif "medium" in machine_type:
-            machine_size = "medium"
-        elif "large" in machine_type:
-            machine_size = "large"
-        pricing = {
-            "gcp": {"micro": 0.012, "small": 0.025, "medium": 0.050, "large": 0.100},
-            "aws": {"micro": 0.0116, "small": 0.023, "medium": 0.046, "large": 0.092},
-            "azure": {"micro": 0.012, "small": 0.024, "medium": 0.048, "large": 0.096}
-        }
-        if provider in pricing and machine_size in pricing[provider]:
-            base_hourly = pricing[provider][machine_size]
-        elif provider in pricing:
-            base_hourly = pricing[provider]["micro"]
-        else:
-            base_hourly = 0.015
-        cpu_multiplier = min(max(cpu / 100, 0.1), 1.0)
-        mem_multiplier = min(max(mem / 100, 0.1), 1.0)
-        usage_factor = (cpu_multiplier + mem_multiplier) / 2
-        monthly_cost = base_hourly * 720 * usage_factor
-        storage_cost = 1.00
-        total_monthly = monthly_cost + storage_cost
-        provider_names = {"gcp": "GCP", "aws": "AWS", "azure": "Azure"}
-        provider_display = provider_names.get(provider, "")
-        machine_display = machine_type.replace('-', ' ').replace('_', ' ').title()
-        if provider_display:
-            return f"${total_monthly:.2f}/month ({provider_display} {machine_display})"
-        else:
-            return f"${total_monthly:.2f}/month (est.)"
-    except Exception:
-        machine_type = os.environ.get('MACHINE_TYPE', 'standard')
-        return f"Based on {machine_type} usage"
+        with open('/proc/uptime', 'r') as f:
+            current_uptime = float(f.read().split()[0])
+    except:
+        current_uptime = 0
+    
+    # Load or initialize persistent data
+    try:
+        with open(cost_file, 'r') as f:
+            data = json.load(f)
+        total_cost = data.get('total_cost', 0.0)
+        last_uptime = data.get('last_uptime_sec', current_uptime)
+    except (FileNotFoundError, json.JSONDecodeError):
+        total_cost = 0.0
+        last_uptime = current_uptime
+    
+    # Handle reboot (uptime decreased)
+    if current_uptime < last_uptime:
+        # Reboot – keep total, reset last_uptime to avoid negative delta
+        last_uptime = current_uptime
+    else:
+        delta_hours = (current_uptime - last_uptime) / 3600.0
+        if delta_hours > 0:
+            incremental = hourly_rate * delta_hours
+            total_cost += incremental
+            last_uptime = current_uptime
+    
+    # Write back updated state
+    with open(cost_file, 'w') as f:
+        json.dump({'total_cost': total_cost, 'last_uptime_sec': last_uptime}, f)
+    
+    # Format output
+    if total_cost < 0.01:
+        return f"${total_cost:.4f} total"
+    elif total_cost < 1:
+        return f"${total_cost:.3f} total"
+    else:
+        return f"${total_cost:.2f} total"
 
 # ------------------------------------------------------------
 # Collect fresh dynamic metrics
@@ -1198,7 +1168,7 @@ summaryCards = [
     {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
     {"label": "Memory", "value": f"{mem_percent}%", "status": status(mem_percent)},
     {"label": "Disk", "value": disk_percent, "status": status(disk_percent.replace('%', ''))},
-    {"label": "Cost", "value": get_cost_estimate(cpu_usage, mem_percent), "status": "info"}
+    {"label": "Cost", "value": get_cumulutive_cost(cpu_usage, mem_percent), "status": "info"}
 ]
 
 services = [
@@ -1469,27 +1439,35 @@ if [ "$LOCAL" != "$REMOTE" ]; then
   if [ -d "$REPO_DIR/images" ]; then
     cp -rf "$REPO_DIR/images/"* "$DATA_DIR/images/" 2>/dev/null
   fi
+
   # Regenerate images.json dynamically
   python3 << 'INNER_PY'
 import json, os
-img_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data') + '/images'
+data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
+img_dir = os.path.join(data_dir, 'images')
+if not os.path.isdir(img_dir):
+    print("ERROR: images directory missing in auto-deploy")
+    exit(1)
 images = []
-extensions = ('.jpg', '.jpeg', '.png', '.webp')
+extensions = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
 for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
     if fname.lower().endswith(extensions):
-        name_parts = fname.replace('_', ' ').split('.')[0].title()
-        location = name_parts.split()[0] if ' ' in name_parts else name_parts
+        title = fname.rsplit('.', 1)[0].replace('_', ' ').title()
+        location = title
         images.append({
             "id": idx,
             "filename": fname,
-            "title": name_parts,
+            "title": title,
             "location": location,
             "photographer": "VM Gallery",
             "tags": ["travel", "nature"]
         })
-with open(f"{img_dir.rsplit('/',1)[0]}/images.json", "w") as f:
+output_file = os.path.join(data_dir, 'images.json')
+with open(output_file, 'w') as f:
     json.dump(images, f, indent=2)
+print(f"Auto-deploy: generated images.json with {len(images)} images")
 INNER_PY
+
   chown -R appuser:appuser "$DATA_DIR/images" 2>/dev/null || true
   chmod -R 755 "$DATA_DIR/images" 2>/dev/null || true
 
