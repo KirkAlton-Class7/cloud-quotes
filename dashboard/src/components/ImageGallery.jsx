@@ -49,7 +49,6 @@ export default function ImageGallery() {
   const currentImage = shuffledImages[currentIndex];
   const imageUrl = currentImage ? `/data/images/${currentImage.filename}` : "";
 
-  // Handlers
   const handleRefresh = () => {
     if (!shuffledImages.length) return;
     setIsRefreshing(true);
@@ -159,7 +158,7 @@ export default function ImageGallery() {
                 {!imageError ? (
                   <img
                     src={imageUrl}
-                    alt={currentImage.location}
+                    alt={currentImage.title}  // <-- FIXED: use title, not location
                     className="w-full h-full object-cover"
                     onError={() => setImageError(true)}
                   />
