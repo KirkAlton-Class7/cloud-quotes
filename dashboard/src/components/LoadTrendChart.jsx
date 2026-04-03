@@ -74,7 +74,7 @@ export default function LoadTrendChart() {
               <Gauge className="w-5 h-5 text-amber-400" />
               <div>
                 <p className="text-sm text-slate-300">Current Load</p>
-                <p className="text-xs text-slate-500">1-minute average</p>
+                <p className="text-xs text-slate-500">1-minute average, last 5 minutes</p>
               </div>
             </div>
             <div className="text-right">

@@ -540,7 +540,7 @@ fi
 
 log "Generating dashboard data"
 
-python3 <<PYTHON_SCRIPT
+sudo -u ${APP_USER} python3 <<PYTHON_SCRIPT
 import json, os, random
 from datetime import datetime, timedelta
 
@@ -991,47 +991,24 @@ import json, os, random
 from datetime import datetime, timedelta
 
 # ------------------------------------------------------------
-# Read all required environment variables (safe for quoted heredoc)
+# Paths
 # ------------------------------------------------------------
-APP_NAME = os.environ.get('APP_NAME', 'vm-dashboard')
-DATA_DIR = os.environ.get('DATA_DIR', f'/var/www/{APP_NAME}/data')
-
-DASHBOARD_APP_NAME = os.environ.get('DASHBOARD_APP_NAME', 'Custom Application')
-DASHBOARD_TAGLINE = os.environ.get('DASHBOARD_TAGLINE', 'Real-time infrastructure monitoring')
-DASHBOARD_USER = os.environ.get('DASHBOARD_USER', 'Dashboard User')
-DASHBOARD_NAME = os.environ.get('DASHBOARD_NAME', 'DevSecOps Dashboard')
-
-HOSTNAME_VM = os.environ.get('HOSTNAME_VM', 'unknown')
-INSTANCE_ID = os.environ.get('INSTANCE_ID', 'unknown')
-ZONE = os.environ.get('ZONE', 'unknown')
-MACHINE_TYPE = os.environ.get('MACHINE_TYPE', 'unknown')
-PROJECT_ID = os.environ.get('PROJECT_ID', 'unknown')
-OS_NAME = os.environ.get('OS_NAME', 'Debian 12')
-INTERNAL_IP = os.environ.get('INTERNAL_IP', 'unknown')
-PUBLIC_IP = os.environ.get('PUBLIC_IP', 'unknown')
-UPTIME = os.environ.get('UPTIME', 'unknown')
-
-NGINX_STATUS = os.environ.get('NGINX_STATUS', 'Running')
-PYTHON_STATUS = os.environ.get('PYTHON_STATUS', 'Installed')
-METADATA_STATUS = os.environ.get('METADATA_STATUS', 'Reachable')
-HTTP_STATUS = os.environ.get('HTTP_STATUS', 'Serving')
-STARTUP_STATUS = os.environ.get('STARTUP_STATUS', 'Completed')
-GITHUB_QUOTES_SYNC = os.environ.get('GITHUB_QUOTES_SYNC', 'Successful')
-FIREWALL_STATUS = os.environ.get('FIREWALL_STATUS', 'Not installed')
-SSH_STATUS = os.environ.get('SSH_STATUS', 'active')
-UPDATE_STATUS = os.environ.get('UPDATE_STATUS', 'Current')
-UPDATES = os.environ.get('UPDATES', '0')
-
-# Metrics will be refreshed by system calls in this script
-# (the env values are just fallbacks)
-CPU_USAGE_ENV = os.environ.get('CPU_USAGE', '0')
-MEM_PERCENT_ENV = os.environ.get('MEM_PERCENT', '0')
-DISK_PERCENT_ENV = os.environ.get('DISK_PERCENT', '0%')
-RX_BYTES_ENV = os.environ.get('RX_BYTES', '0')
-TX_BYTES_ENV = os.environ.get('TX_BYTES', '0')
+DATA_DIR = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
+DASHBOARD_JSON = f"{DATA_DIR}/dashboard-data.json"
 
 # ------------------------------------------------------------
-# Helper functions (same as before, but using env where needed)
+# Load existing dashboard data (to preserve static fields)
+# ------------------------------------------------------------
+existing = {}
+if os.path.exists(DASHBOARD_JSON):
+    try:
+        with open(DASHBOARD_JSON, 'r') as f:
+            existing = json.load(f)
+    except:
+        pass
+
+# ------------------------------------------------------------
+# Helper functions (status, network, IP, load, SSH, updates, cost)
 # ------------------------------------------------------------
 def status(val, warn=70):
     try:
@@ -1053,7 +1030,7 @@ def get_internal_ip():
     try:
         import subprocess
         result = subprocess.run(
-            ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google', 
+            ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google',
              'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip'],
             capture_output=True, text=True, timeout=2
         )
@@ -1073,7 +1050,7 @@ def get_public_ip():
     try:
         import subprocess
         result = subprocess.run(
-            ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google', 
+            ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google',
              'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip'],
             capture_output=True, text=True, timeout=2
         )
@@ -1116,21 +1093,16 @@ def get_update_status():
     except:
         return "Current"
 
-def get_cost_estimate():
-    # Your existing cost estimation logic (unchanged)
+def get_cost_estimate(cpu_usage, mem_percent):
     try:
         machine_type = os.environ.get('MACHINE_TYPE', 'e2-micro').lower()
-        try:
-            cpu = float(os.environ.get('CPU_USAGE', '0'))
-            mem = float(os.environ.get('MEM_PERCENT', '0'))
-        except:
-            cpu = 0
-            mem = 0
+        cpu = float(cpu_usage)
+        mem = float(mem_percent)
         provider = "unknown"
         try:
             import subprocess
             gcp_check = subprocess.run(
-                ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google', 
+                ['curl', '-s', '--max-time', '2', '-H', 'Metadata-Flavor: Google',
                  'http://metadata.google.internal/computeMetadata/v1/instance/zone'],
                 capture_output=True, text=True, timeout=2
             )
@@ -1151,7 +1123,7 @@ def get_cost_estimate():
         if provider == "unknown":
             try:
                 azure_check = subprocess.run(
-                    ['curl', '-s', '--max-time', '2', '-H', 'Metadata:true', 
+                    ['curl', '-s', '--max-time', '2', '-H', 'Metadata:true',
                      'http://169.254.169.254/metadata/instance?api-version=2017-08-01'],
                     capture_output=True, text=True, timeout=2
                 )
@@ -1197,7 +1169,7 @@ def get_cost_estimate():
         return f"Based on {machine_type} usage"
 
 # ------------------------------------------------------------
-# Collect fresh metrics (overrides env values)
+# Collect fresh dynamic metrics
 # ------------------------------------------------------------
 cpu_usage = os.popen("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf \"%.0f\", usage}'").read().strip() or "0"
 mem_percent = os.popen("free | awk '/Mem:/ {printf(\"%.0f\"), $3/$2 * 100.0}'").read().strip() or "0"
@@ -1209,9 +1181,7 @@ internal_ip = get_internal_ip()
 public_ip = get_public_ip()
 network_info = get_network_info()
 
-# ------------------------------------------------------------
 # Load quotes
-# ------------------------------------------------------------
 quotes = []
 try:
     with open(f"{DATA_DIR}/quotes.json") as f:
@@ -1222,69 +1192,115 @@ except:
     print("Using fallback quotes")
 
 # ------------------------------------------------------------
-# Build dashboard data
+# Build dynamic parts
+# ------------------------------------------------------------
+summaryCards = [
+    {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
+    {"label": "Memory", "value": f"{mem_percent}%", "status": status(mem_percent)},
+    {"label": "Disk", "value": disk_percent, "status": status(disk_percent.replace('%', ''))},
+    {"label": "Cost", "value": get_cost_estimate(cpu_usage, mem_percent), "status": "info"}
+]
+
+services = [
+    {"label": "Nginx", "value": os.environ.get('NGINX_STATUS', 'Running'), "status": "healthy"},
+    {"label": "Python", "value": os.environ.get('PYTHON_STATUS', 'Installed'), "status": "healthy"},
+    {"label": "Metadata Service", "value": os.environ.get('METADATA_STATUS', 'Reachable'), "status": "healthy"},
+    {"label": "HTTP Service", "value": os.environ.get('HTTP_STATUS', 'Serving'), "status": "healthy"},
+    {"label": "Startup Script", "value": os.environ.get('STARTUP_STATUS', 'Completed'), "status": "healthy"},
+    {"label": "GitHub Quotes Sync", "value": os.environ.get('GITHUB_QUOTES_SYNC', 'Successful'), "status": "healthy"},
+    {"label": "Bootstrap Packages", "value": "nginx, python3, curl, jq, git", "status": "healthy"}
+]
+
+security = [
+    {"label": "Host Firewall", "value": os.environ.get('FIREWALL_STATUS', 'Not installed'), "status": "info"},
+    {"label": "SSH", "value": get_ssh_status(), "status": "healthy"},
+    {"label": "Updates", "value": get_update_status(), "status": "info"},
+    {"label": "Internal IP", "value": internal_ip, "status": "info"},
+    {"label": "Public IP", "value": public_ip, "status": "info"}
+]
+
+logs = [
+    {"time": datetime.now().strftime("%H:%M:%S"), "level": "info", "scope": "system", "message": f"Dashboard updated - CPU: {cpu_usage}%, Memory: {mem_percent}%"},
+    {"time": (datetime.now() - timedelta(minutes=5)).strftime("%H:%M:%S"), "level": "info", "scope": "metrics", "message": f"Network: {network_info}"},
+    {"time": (datetime.now() - timedelta(minutes=10)).strftime("%H:%M:%S"), "level": "info", "scope": "system", "message": "System health check passed"},
+    {"time": (datetime.now() - timedelta(minutes=15)).strftime("%H:%M:%S"), "level": "info", "scope": "quotes", "message": f"Quotes loaded: {len(quotes)} available"},
+    {"time": (datetime.now() - timedelta(minutes=30)).strftime("%H:%M:%S"), "level": "info", "scope": "nginx", "message": "Nginx serving dashboard"}
+]
+
+resourceTable = [
+    {"name": "nginx", "type": "service", "scope": "system", "status": os.environ.get('NGINX_STATUS', 'Running')},
+    {"name": "python3", "type": "runtime", "scope": "system", "status": "Installed"},
+    {"name": "nodejs", "type": "runtime", "scope": "system", "status": "Installed"},
+    {"name": "quotes.json", "type": "data", "scope": "application", "status": "Active"},
+    {"name": "dashboard-data.json", "type": "data", "scope": "application", "status": "Active"}
+]
+
+systemLoad = get_load_average()
+
+# ------------------------------------------------------------
+# Merge with existing static data (preserve identity, network, location, systemResources)
+# ------------------------------------------------------------
+identity = existing.get('identity', {
+    "project": os.environ.get('PROJECT_ID', 'unknown'),
+    "instanceId": os.environ.get('INSTANCE_ID', 'unknown'),
+    "hostname": hostname,
+    "machineType": os.environ.get('MACHINE_TYPE', 'unknown')
+})
+
+network = existing.get('network', {
+    "vpc": "default",
+    "subnet": f"{os.environ.get('ZONE', 'unknown')[:-2]}-subnet",
+    "internalIp": internal_ip,
+    "externalIp": public_ip
+})
+
+location = existing.get('location', {
+    "region": os.environ.get('ZONE', 'unknown')[:-2] if len(os.environ.get('ZONE', 'unknown')) > 2 else 'unknown',
+    "zone": os.environ.get('ZONE', 'unknown'),
+    "uptime": uptime,
+    "loadAvg": f"{systemLoad:.2f}"
+})
+
+systemResources = existing.get('systemResources', {
+    "memory": {"total": 0, "used": 0, "free": 0},
+    "disk": {"total": 0, "used": 0, "available": 0},
+    "cpu": {"cores": 1, "frequency": None, "usage": float(cpu_usage)},
+    "endpoints": {"healthz": "/healthz", "metadata": "/metadata"}
+})
+
+# Update the dynamic fields inside systemResources (e.g., cpu usage)
+if "cpu" in systemResources:
+    systemResources["cpu"]["usage"] = float(cpu_usage)
+
+# ------------------------------------------------------------
+# Build final data
 # ------------------------------------------------------------
 data = {
-    "summaryCards": [
-        {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
-        {"label": "Memory", "value": f"{mem_percent}%", "status": status(mem_percent)},
-        {"label": "Disk", "value": disk_percent, "status": status(disk_percent.replace('%', ''))},
-        {"label": "Cost", "value": get_cost_estimate(), "status": "info"}
-    ],
-    "vmInformation": [
-        {"label": "Hostname", "value": hostname},
-        {"label": "Instance ID", "value": INSTANCE_ID},
-        {"label": "Zone", "value": ZONE},
-        {"label": "Machine Type", "value": MACHINE_TYPE},
-        {"label": "OS", "value": OS_NAME},
-        {"label": "Project ID", "value": PROJECT_ID},
-        {"label": "Estimated Cost (Usage)", "value": get_cost_estimate(), "status": "info"}
-    ],
-    "services": [
-        {"label": "Nginx", "value": NGINX_STATUS, "status": "healthy"},
-        {"label": "Python", "value": PYTHON_STATUS, "status": "healthy"},
-        {"label": "Metadata Service", "value": METADATA_STATUS, "status": "healthy"},
-        {"label": "HTTP Service", "value": HTTP_STATUS, "status": "healthy"},
-        {"label": "Startup Script", "value": STARTUP_STATUS, "status": "healthy"},
-        {"label": "GitHub Quotes Sync", "value": GITHUB_QUOTES_SYNC, "status": "healthy"},
-        {"label": "Bootstrap Packages", "value": "nginx, python3, curl, jq, git", "status": "healthy"}
-    ],
-    "security": [
-        {"label": "Host Firewall", "value": FIREWALL_STATUS, "status": "info"},
-        {"label": "SSH", "value": get_ssh_status(), "status": "healthy"},
-        {"label": "Updates", "value": get_update_status(), "status": "info"},
-        {"label": "Internal IP", "value": internal_ip, "status": "info"},
-        {"label": "Public IP", "value": public_ip, "status": "info"}
-    ],
-    "meta": {
-        "appName": DASHBOARD_APP_NAME,
-        "tagline": DASHBOARD_TAGLINE,
-        "dashboardUser": DASHBOARD_USER,
-        "dashboardName": DASHBOARD_NAME,
+    "summaryCards": summaryCards,
+    "vmInformation": existing.get('vmInformation', []),  # keep as is, it's static
+    "services": services,
+    "security": security,
+    "meta": existing.get('meta', {
+        "appName": os.environ.get('DASHBOARD_APP_NAME', 'DevSecOps'),
+        "tagline": os.environ.get('DASHBOARD_TAGLINE', 'Real-time infrastructure monitoring'),
+        "dashboardUser": os.environ.get('DASHBOARD_USER', 'Kirk Alton'),
+        "dashboardName": os.environ.get('DASHBOARD_NAME', 'DevSecOps Dashboard'),
         "uptime": uptime
-    },
+    }),
     "quote": random.choice(quotes),
-    "logs": [
-        {"time": datetime.now().strftime("%H:%M:%S"), "level": "info", "scope": "system", "message": f"Dashboard updated - CPU: {cpu_usage}%, Memory: {mem_percent}%"},
-        {"time": (datetime.now() - timedelta(minutes=5)).strftime("%H:%M:%S"), "level": "info", "scope": "metrics", "message": f"Network: {network_info}"},
-        {"time": (datetime.now() - timedelta(minutes=10)).strftime("%H:%M:%S"), "level": "info", "scope": "system", "message": "System health check passed"},
-        {"time": (datetime.now() - timedelta(minutes=15)).strftime("%H:%M:%S"), "level": "info", "scope": "quotes", "message": f"Quotes loaded: {len(quotes)} available"},
-        {"time": (datetime.now() - timedelta(minutes=30)).strftime("%H:%M:%S"), "level": "info", "scope": "nginx", "message": "Nginx serving dashboard"}
-    ],
-    "resourceTable": [
-        {"name": "nginx", "type": "service", "scope": "system", "status": NGINX_STATUS},
-        {"name": "python3", "type": "runtime", "scope": "system", "status": "Installed"},
-        {"name": "nodejs", "type": "runtime", "scope": "system", "status": "Installed"},
-        {"name": "quotes.json", "type": "data", "scope": "application", "status": "Active"},
-        {"name": "dashboard-data.json", "type": "data", "scope": "application", "status": "Active"}
-    ],
-    "systemLoad": get_load_average()
+    "logs": logs,
+    "resourceTable": resourceTable,
+    "systemLoad": systemLoad,
+    "identity": identity,
+    "network": network,
+    "location": location,
+    "systemResources": systemResources
 }
 
 # ------------------------------------------------------------
-# Write the refreshed data
+# Write to file
 # ------------------------------------------------------------
-with open(f"{DATA_DIR}/dashboard-data.json", "w") as f:
+with open(DASHBOARD_JSON, "w") as f:
     json.dump(data, f, indent=2)
 
 print(f"Dashboard data refreshed - CPU: {cpu_usage}%, Memory: {mem_percent}%, Disk: {disk_percent}")
@@ -1406,56 +1422,57 @@ log "Startup complete"
 
 log "Setting up dashboard auto-deploy"
 
-DEPLOY_CMD="*/15 * * * * bash -c '
+# Create the deployment script
+cat > /opt/dashboard-deploy.sh << 'DEPLOY_SCRIPT'
+#!/bin/bash
 LOCK_FILE=/tmp/dashboard.lock
-REPO_DIR=/opt/${APP_NAME}
-APP_DIR=${APP_DIR}
-DATA_DIR=${DATA_DIR}
+REPO_DIR=/opt/vm-dashboard
+APP_DIR=/var/www/vm-dashboard
+DATA_DIR=/var/www/vm-dashboard/data
 TMP_DIR=/tmp/dashboard-build
 
 # Prevent concurrent runs
-if [ -f \$LOCK_FILE ]; then
+if [ -f "$LOCK_FILE" ]; then
   exit 0
 fi
+touch "$LOCK_FILE"
+trap "rm -f \"$LOCK_FILE\"" EXIT
 
-touch \$LOCK_FILE
-trap \"rm -f \$LOCK_FILE\" EXIT
-
-echo \"[DEPLOY] Checking for updates...\" >> /var/log/dashboard-deploy.log
+echo "[DEPLOY] Checking for updates..." >> /var/log/dashboard-deploy.log
 
 # Navigate to repo and ensure ownership
-cd \$REPO_DIR || exit 0
-chown -R ${APP_USER}:${APP_USER} \$REPO_DIR
+cd "$REPO_DIR" || exit 0
+chown -R appuser:appuser "$REPO_DIR"
 
 cd dashboard || exit 0
 
 # Compare local HEAD with remote main
-LOCAL=\$(git rev-parse HEAD)
-REMOTE=\$(git rev-parse origin/main 2>/dev/null || echo \$LOCAL)
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "$LOCAL")
 
-if [ \"\$LOCAL\" != \"\$REMOTE\" ]; then
-  echo \"[DEPLOY] Changes detected, deploying...\" >> /var/log/dashboard-deploy.log
+if [ "$LOCAL" != "$REMOTE" ]; then
+  echo "[DEPLOY] Changes detected, deploying..." >> /var/log/dashboard-deploy.log
 
   # Pull latest code
   git pull || exit 1
-  cd \$REPO_DIR/dashboard || exit 1
+  cd "$REPO_DIR/dashboard" || exit 1
 
   # Update pricing script (copy from repo if changed, then run)
-  if [ -f \"\$REPO_DIR/scripts/fetch_pricing.py\" ]; then
-      cp -f \"\$REPO_DIR/scripts/fetch_pricing.py\" /opt/scripts/fetch_pricing.py
-      chmod +x /opt/scripts/fetch_pricing.py
-      export DATA_DIR=${DATA_DIR}
-      /opt/scripts/fetch_pricing.py
+  if [ -f "$REPO_DIR/scripts/fetch_pricing.py" ]; then
+    cp -f "$REPO_DIR/scripts/fetch_pricing.py" /opt/scripts/fetch_pricing.py
+    chmod +x /opt/scripts/fetch_pricing.py
+    export DATA_DIR="$DATA_DIR"
+    /opt/scripts/fetch_pricing.py
   fi
 
-  # --- Copy latest images and regenerate metadata (force overwrite) ---
-  if [ -d \"\$REPO_DIR/images\" ]; then
-    cp -rf \"\$REPO_DIR/images/\"* \"\$DATA_DIR/images/\" 2>/dev/null
+  # Copy latest images and regenerate metadata (force overwrite)
+  if [ -d "$REPO_DIR/images" ]; then
+    cp -rf "$REPO_DIR/images/"* "$DATA_DIR/images/" 2>/dev/null
   fi
   # Regenerate images.json dynamically
   python3 << 'INNER_PY'
 import json, os
-img_dir = \"\$DATA_DIR/images\"
+img_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data') + '/images'
 images = []
 extensions = ('.jpg', '.jpeg', '.png', '.webp')
 for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
@@ -1463,42 +1480,51 @@ for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
         name_parts = fname.replace('_', ' ').split('.')[0].title()
         location = name_parts.split()[0] if ' ' in name_parts else name_parts
         images.append({
-            \"id\": idx,
-            \"filename\": fname,
-            \"title\": name_parts,
-            \"location\": location,
-            \"photographer\": \"VM Gallery\",
-            \"tags\": [\"travel\", \"nature\"]
+            "id": idx,
+            "filename": fname,
+            "title": name_parts,
+            "location": location,
+            "photographer": "VM Gallery",
+            "tags": ["travel", "nature"]
         })
-with open(\"\$DATA_DIR/images.json\", \"w\") as f:
+with open(f"{img_dir.rsplit('/',1)[0]}/images.json", "w") as f:
     json.dump(images, f, indent=2)
 INNER_PY
-  chown -R ${APP_USER}:${APP_USER} \"\$DATA_DIR/images\" 2>/dev/null || true
-  chmod -R 755 \"\$DATA_DIR/images\" 2>/dev/null || true
-  # ---------------------------------------------------------
+  chown -R appuser:appuser "$DATA_DIR/images" 2>/dev/null || true
+  chmod -R 755 "$DATA_DIR/images" 2>/dev/null || true
 
   # Install dependencies and build
   if ! npm ci 2>/dev/null; then
     npm install || exit 1
   fi
-
   npm run build || exit 1
 
   # Atomic deploy: copy to temp, then replace live directory
-  if [ -d \"dist\" ]; then
-    rm -rf \$TMP_DIR
-    cp -r dist \$TMP_DIR
-    rm -rf \$APP_DIR/*
-    cp -r \$TMP_DIR/* \$APP_DIR/
-    echo \"[DEPLOY] Deployment complete\" >> /var/log/dashboard-deploy.log
+  if [ -d "dist" ]; then
+    rm -rf "$TMP_DIR"
+    cp -r dist "$TMP_DIR"
+    rm -rf "$APP_DIR"/*
+    cp -r "$TMP_DIR"/* "$APP_DIR"/
+    echo "[DEPLOY] Deployment complete" >> /var/log/dashboard-deploy.log
   fi
 else
-  echo \"[DEPLOY] No changes\" >> /var/log/dashboard-deploy.log
+  echo "[DEPLOY] No changes" >> /var/log/dashboard-deploy.log
 fi
-' 2>&1 # dashboard-auto-deploy"
+DEPLOY_SCRIPT
 
-# Register the cron job for the app user
-(crontab -u ${APP_USER} -l 2>/dev/null | grep -v 'dashboard-auto-deploy'; echo "$DEPLOY_CMD") | crontab -u ${APP_USER} -
+# Make the script executable
+chmod +x /opt/dashboard-deploy.sh
+
+# Set up cron job to run every 15 minutes
+(crontab -u ${APP_USER} -l 2>/dev/null | grep -v 'dashboard-deploy.sh'; echo "*/15 * * * * /opt/dashboard-deploy.sh >> /var/log/dashboard-deploy.log 2>&1") | crontab -u ${APP_USER} -
 
 log "Auto-deploy cron job configured (every 15 minutes)"
 log "Dashboard available at http://${PUBLIC_IP}"
+
+# Overview
+# Trends
+# ???
+# VM Information
+# System Resources
+# Services
+# Logs
