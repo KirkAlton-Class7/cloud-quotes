@@ -1,122 +1,362 @@
 [
   {
     "id": 1,
-    "filename": "chiang_mai_mountain_sunrise.webp",
-    "title": "Chiang Mai Mountain Sunrise",
-    "location": "Chiang Mai, Thailand",
+    "filename": "argentina-buenos-aires-cityscape.webp",
+    "title": "Buenos Aires Cityscape",
+    "location": "Buenos Aires, Argentina",
     "photographer": null,
-    "tags": ["mountains", "sunrise", "landscape"]
+    "tags": ["argentina", "city", "urban", "skyline", "buildings"]
   },
   {
     "id": 2,
-    "filename": "chiang_mai_temple_sunset.webp",
-    "title": "Chiang Mai Temple Sunset",
-    "location": "Chiang Mai, Thailand",
+    "filename": "argentina-salta-desert-altiplano.jpg",
+    "title": "Salta Altiplano Landscape",
+    "location": "Salta, Argentina",
     "photographer": null,
-    "tags": ["temple", "sunset", "culture"]
+    "tags": ["argentina", "desert", "altiplano", "mountains", "landscape"]
   },
   {
     "id": 3,
-    "filename": "chiang_mai_misty_valley.webp",
-    "title": "Misty Valley",
-    "location": "Chiang Mai, Thailand",
+    "filename": "argentina-ushuaia-patagonia-harbor-.jpg",
+    "title": "Ushuaia Patagonia Harbor",
+    "location": "Ushuaia, Argentina",
     "photographer": null,
-    "tags": ["valley", "fog", "nature"]
+    "tags": ["argentina", "harbor", "mountains", "snow", "coastal"]
   },
   {
     "id": 4,
-    "filename": "madagascar_baobab_trees.webp",
-    "title": "Baobab Trees",
-    "location": "Madagascar",
+    "filename": "brazil-bonito.jpg",
+    "title": "Bonito Clear Water Lagoon",
+    "location": "Bonito, Brazil",
     "photographer": null,
-    "tags": ["baobab", "trees", "dry_landscape"]
+    "tags": ["brazil", "water", "lagoon", "jungle", "nature"]
   },
   {
     "id": 5,
-    "filename": "madagascar_lemur_forest.webp",
-    "title": "Lemur in the Forest",
-    "location": "Madagascar",
+    "filename": "brazil-jalpao-state-park.jpg",
+    "title": "Jalapao Sand Dunes Lagoons",
+    "location": "Jalapao, Brazil",
     "photographer": null,
-    "tags": ["lemur", "wildlife", "forest"]
+    "tags": ["brazil", "dunes", "desert", "lagoon", "aerial"]
   },
   {
     "id": 6,
-    "filename": "madagascar_chameleon_macro.webp",
-    "title": "Chameleon Close-up",
-    "location": "Madagascar",
+    "filename": "brazil-Sugarloaf-andCorcovado-Mountains.jpg",
+    "title": "Rio de Janeiro Coastal Mountains",
+    "location": "Rio de Janeiro, Brazil",
     "photographer": null,
-    "tags": ["chameleon", "macro", "wildlife"]
+    "tags": ["brazil", "city", "coastal", "mountains", "landscape"]
   },
   {
     "id": 7,
-    "filename": "madagascar_waterfall_canyon.webp",
-    "title": "Waterfall Canyon",
-    "location": "Madagascar",
+    "filename": "colombia-bogota-aerial-cityscape.jpg",
+    "title": "Bogota Aerial Cityscape",
+    "location": "Bogota, Colombia",
     "photographer": null,
-    "tags": ["waterfall", "canyon", "nature"]
+    "tags": ["colombia", "city", "urban", "aerial", "skyline"]
   },
   {
     "id": 8,
-    "filename": "madagascar_zebra_grasslands.webp",
-    "title": "Zebra in the Grasslands",
-    "location": "Madagascar",
+    "filename": "colombia-chicamocha-canyon-highland-river.jpg",
+    "title": "Chicamocha Canyon River",
+    "location": "Chicamocha, Colombia",
     "photographer": null,
-    "tags": ["zebra", "savanna", "wildlife"]
+    "tags": ["colombia", "canyon", "river", "mountains", "valley"]
   },
   {
     "id": 9,
-    "filename": "madagascar_tropical_beach.webp",
-    "title": "Tropical Beach",
-    "location": "Madagascar",
+    "filename": "colombia-ejecafetero-andean-highlands.jpg",
+    "title": "Eje Cafetero Andean Highlands",
+    "location": "Eje Cafetero, Colombia",
     "photographer": null,
-    "tags": ["beach", "tropical", "ocean"]
+    "tags": ["colombia", "mountains", "highlands", "valley", "nature"]
   },
   {
     "id": 10,
-    "filename": "madagascar_highlands_sunset.webp",
-    "title": "Highlands Sunset",
-    "location": "Madagascar",
+    "filename": "czech-republic-bohemian-switzerland-national-park-pravcicka-archway.jpg",
+    "title": "Pravcicka Archway",
+    "location": "Bohemian Switzerland, Czech Republic",
     "photographer": null,
-    "tags": ["highlands", "sunset", "landscape"]
+    "tags": ["czechrepublic", "arch", "rock", "forest", "landscape"]
   },
   {
     "id": 11,
-    "filename": "madagascar_rainforest_canopy.webp",
-    "title": "Rainforest Canopy",
-    "location": "Madagascar",
+    "filename": "czech-republic-moravia-rolling-hills.avif",
+    "title": "Moravia Rolling Hills",
+    "location": "Moravia, Czech Republic",
     "photographer": null,
-    "tags": ["rainforest", "canopy", "jungle"]
+    "tags": ["czechrepublic", "hills", "farmland", "countryside", "landscape"]
   },
   {
     "id": 12,
-    "filename": "madagascar_baobab_avenue.webp",
-    "title": "Avenue of the Baobabs",
-    "location": "Madagascar",
+    "filename": "czechrepublic-prague-charles-bridge-vltava-river-cityscape.jpg",
+    "title": "Charles Bridge Over Vltava",
+    "location": "Prague, Czech Republic",
     "photographer": null,
-    "tags": ["baobab", "avenue", "iconic"]
+    "tags": ["czechrepublic", "bridge", "river", "city", "architecture"]
   },
   {
     "id": 13,
-    "filename": "madagascar_jungle_stream.webp",
-    "title": "Jungle Stream",
-    "location": "Madagascar",
+    "filename": "finland-lapland-aurora-borealis-snowy-forest.jpg",
+    "title": "Aurora Borealis Over Snowy Forest",
+    "location": "Lapland, Finland",
     "photographer": null,
-    "tags": ["jungle", "stream", "nature"]
+    "tags": ["finland", "aurora", "snow", "forest", "night"]
   },
   {
     "id": 14,
-    "filename": "madagascar_lagoon_aerial.webp",
-    "title": "Lagoon Aerial View",
-    "location": "Madagascar",
+    "filename": "finland-lapland-snow-covered-log-cabin.jpg",
+    "title": "Snow Covered Log Cabin",
+    "location": "Lapland, Finland",
     "photographer": null,
-    "tags": ["lagoon", "aerial", "coast"]
+    "tags": ["finland", "cabin", "snow", "forest", "winter"]
   },
   {
     "id": 15,
-    "filename": "madagascar_forest_waterfall.webp",
-    "title": "Forest Waterfall",
-    "location": "Madagascar",
+    "filename": "finland-helsinki-harbor-maritime-cityscape.avif",
+    "title": "Helsinki Harbor Cityscape",
+    "location": "Helsinki, Finland",
     "photographer": null,
-    "tags": ["forest", "waterfall", "lush"]
+    "tags": ["finland", "harbor", "city", "water", "urban"]
+  },
+  {
+    "id": 16,
+    "filename": "germany-frankfurt-sunset-skyline-with-christmas-market-1024.jpg",
+    "title": "Frankfurt Skyline at Sunset",
+    "location": "Frankfurt, Germany",
+    "photographer": null,
+    "tags": ["germany", "city", "skyline", "sunset", "urban"]
+  },
+  {
+    "id": 17,
+    "filename": "germany-grainau-alpine-lake-and-mountains.jpg",
+    "title": "Alpine Lake and Mountains",
+    "location": "Grainau, Germany",
+    "photographer": null,
+    "tags": ["germany", "lake", "mountains", "alpine", "reflection"]
+  },
+  {
+    "id": 18,
+    "filename": "germany-schwangau-neuschwanstein-castle-alpine-foothills.jpg",
+    "title": "Neuschwanstein Castle",
+    "location": "Schwangau, Germany",
+    "photographer": null,
+    "tags": ["germany", "castle", "mountains", "forest", "landmark"]
+  },
+  {
+    "id": 19,
+    "filename": "indonesia-east-java-bromo-volcano-smoke-plume.jpg",
+    "title": "Mount Bromo Smoke Plume",
+    "location": "East Java, Indonesia",
+    "photographer": null,
+    "tags": ["indonesia", "volcano", "mountain", "smoke", "landscape"]
+  },
+  {
+    "id": 20,
+    "filename": "indonesia-jakarta-metropolitan-skyline.jpg",
+    "title": "Jakarta Metropolitan Skyline",
+    "location": "Jakarta, Indonesia",
+    "photographer": null,
+    "tags": ["indonesia", "city", "skyline", "urban", "night"]
+  },
+  {
+    "id": 21,
+    "filename": "indonesia-tabanan-jatiluwih-rice-terraces-subak-system.webp",
+    "title": "Jatiluwih Rice Terraces",
+    "location": "Tabanan, Indonesia",
+    "photographer": null,
+    "tags": ["indonesia", "rice", "terraces", "agriculture", "landscape"]
+  },
+  {
+    "id": 22,
+    "filename": "madagascar-antananarivo-hillside-cityscape.jpg",
+    "title": "Antananarivo Hillside Cityscape",
+    "location": "Antananarivo, Madagascar",
+    "photographer": null,
+    "tags": ["madagascar", "city", "hillside", "urban", "homes"]
+  },
+  {
+    "id": 23,
+    "filename": "madagascar-avenue-of-the-baobabs-sunset.jpg",
+    "title": "Avenue of the Baobabs at Sunset",
+    "location": "Menabe, Madagascar",
+    "photographer": null,
+    "tags": ["madagascar", "baobab", "trees", "sunset", "landscape"]
+  },
+  {
+    "id": 24,
+    "filename": "madagascar-nosy-be-coastal-fishing-village.jpg",
+    "title": "Nosy Be Coastal Fishing Village",
+    "location": "Nosy Be, Madagascar",
+    "photographer": null,
+    "tags": ["madagascar", "village", "coast", "boats", "tropical"]
+  },
+  {
+    "id": 25,
+    "filename": "malaysia-kuala-lumpur-city-skyline.webp",
+    "title": "Kuala Lumpur Skyline",
+    "location": "Kuala Lumpur, Malaysia",
+    "photographer": null,
+    "tags": ["malaysia", "city", "skyline", "urban", "modern"]
+  },
+  {
+    "id": 26,
+    "filename": "malaysia-langkawi-islands.jpg",
+    "title": "Langkawi Coastal Islands",
+    "location": "Langkawi, Malaysia",
+    "photographer": null,
+    "tags": ["malaysia", "islands", "coastline", "tropical", "water"]
+  },
+  {
+    "id": 27,
+    "filename": "malaysia-langkawi-rainforest-lakeside-village.jpg",
+    "title": "Rainforest Lakeside Village",
+    "location": "Langkawi, Malaysia",
+    "photographer": null,
+    "tags": ["malaysia", "village", "rainforest", "lake", "countryside"]
+  },
+  {
+    "id": 28,
+    "filename": "peru-cusco-humantay-lake-glacial-water.jpg",
+    "title": "Humantay Lake",
+    "location": "Cusco, Peru",
+    "photographer": null,
+    "tags": ["peru", "lake", "mountains", "glacial", "water"]
+  },
+  {
+    "id": 29,
+    "filename": "peru-cusco-sacred-valley-mountain-village.avif",
+    "title": "Sacred Valley Mountain Village",
+    "location": "Cusco, Peru",
+    "photographer": null,
+    "tags": ["peru", "village", "mountains", "valley", "rural"]
+  },
+  {
+    "id": 30,
+    "filename": "peru-cusco-vinicunca-andean-rainbow-mountain-hiking-path.jpg",
+    "title": "Rainbow Mountain",
+    "location": "Cusco, Peru",
+    "photographer": null,
+    "tags": ["peru", "mountains", "colorful", "hiking", "landscape"]
+  },
+  {
+    "id": 31,
+    "filename": "peru-lima-miraflores-oceanfront.jpg",
+    "title": "Miraflores Oceanfront",
+    "location": "Lima, Peru",
+    "photographer": null,
+    "tags": ["peru", "coast", "city", "ocean", "urban"]
+  },
+  {
+    "id": 32,
+    "filename": "philippines-busuanga-el-nido-palawan-karst-islands-aerial.jpg",
+    "title": "Karst Islands and Coastal Village",
+    "location": "Palawan, Philippines",
+    "photographer": null,
+    "tags": ["philippines", "coastline", "islands", "village", "tropical"]
+  },
+  {
+    "id": 33,
+    "filename": "philippines-daraga-albay-mayon-volcano.jpg",
+    "title": "Mayon Volcano Over Local Town",
+    "location": "Albay, Philippines",
+    "photographer": null,
+    "tags": ["philippines", "volcano", "town", "landscape", "people"]
+  },
+  {
+    "id": 34,
+    "filename": "philippines-manila-bay-coastal-cityscape-sunset.jpg",
+    "title": "Coastal City at Sunset",
+    "location": "Manila Bay, Philippines",
+    "photographer": null,
+    "tags": ["philippines", "city", "coastline", "sunset", "urban"]
+  },
+  {
+    "id": 35,
+    "filename": "philippines-puerto-princesa-city-palawan-el-nido-hidden-beach-limestone-lagoon.webp",
+    "title": "Hidden Limestone Lagoon Beach",
+    "location": "Palawan, Philippines",
+    "photographer": null,
+    "tags": ["philippines", "lagoon", "beach", "limestone", "tropical"]
+  },
+  {
+    "id": 36,
+    "filename": "poland-ojcow-ojcow-national-park-krakow-gate.jpg",
+    "title": "Ojców National Park Rock Gate",
+    "location": "Ojców, Poland",
+    "photographer": null,
+    "tags": ["poland", "forest", "rock formations", "park", "nature"]
+  },
+  {
+    "id": 37,
+    "filename": "poland-krakow-zakopane-tatra-mountains-forest-cabin.avif",
+    "title": "Tatra Mountains Forest Cabin",
+    "location": "Zakopane, Poland",
+    "photographer": null,
+    "tags": ["poland", "mountains", "forest", "cabin", "countryside"]
+  },
+  {
+    "id": 38,
+    "filename": "poland-warsaw-skyline-sunset.jpg",
+    "title": "Warsaw Cityscape at Sunset",
+    "location": "Warsaw, Poland",
+    "photographer": null,
+    "tags": ["poland", "city", "skyline", "sunset", "urban"]
+  },
+  {
+    "id": 39,
+    "filename": "thailand-chiang-mai-river-cityscape.jpg",
+    "title": "River City Landscape",
+    "location": "Chiang Mai, Thailand",
+    "photographer": null,
+    "tags": ["thailand", "river", "city", "urban", "water"]
+  },
+  {
+    "id": 40,
+    "filename": "thailand-mae-hong-son-hillside-village.jpg",
+    "title": "Hillside Village Overlooking Lake",
+    "location": "Mae Hong Son, Thailand",
+    "photographer": null,
+    "tags": ["thailand", "village", "hills", "lake", "countryside"]
+  },
+  {
+    "id": 41,
+    "filename": "thailand-maehongson-rice-terraces-mountain-sunset.jpg",
+    "title": "Mountain Rice Terraces at Sunset",
+    "location": "Mae Hong Son, Thailand",
+    "photographer": null,
+    "tags": ["thailand", "rice terraces", "mountains", "sunset", "rural"]
+  },
+  {
+    "id": 42,
+    "filename": "thailand-phuket-ko-panyi-floating-village.jpeg",
+    "title": "Floating Village Among Limestone Cliffs",
+    "location": "Ko Panyi, Phang Nga Bay, Thailand",
+    "photographer": null,
+    "tags": ["thailand", "village", "coastal", "limestone", "water"]
+  },
+  {
+    "id": 43,
+    "filename": "vietnam-ha-giang-ha-giang-loop-motorbike-route-remote-mountain.jpg",
+    "title": "Ha Giang Mountain Loop",
+    "location": "Ha Giang, Vietnam",
+    "photographer": null,
+    "tags": ["vietnam", "mountains", "road", "countryside", "valley"]
+  },
+  {
+    "id": 44,
+    "filename": "vietnam-hanoi-floating-village-ha-long-bay.jpg",
+    "title": "Floating Village in Limestone Bay",
+    "location": "Ha Long Bay, Vietnam",
+    "photographer": null,
+    "tags": ["vietnam", "floating village", "coastline", "limestone", "water"]
+  },
+  {
+    "id": 45,
+    "filename": "vietnam-ho-chi-minh-city-saigon-skyline-at-night.jpg",
+    "title": "City Skyline at Night",
+    "location": "Ho Chi Minh City, Vietnam",
+    "photographer": null,
+    "tags": ["vietnam", "city", "skyline", "night", "urban"]
   }
 ]

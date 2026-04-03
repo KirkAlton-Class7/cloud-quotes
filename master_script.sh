@@ -1528,3 +1528,21 @@ log "Dashboard available at http://${PUBLIC_IP}"
 # System Resources
 # Services
 # Logs
+
+# Peru
+# Colombia
+# Brazil
+# Argentina
+# Madagascar
+# Finland
+# Germany
+# Poland
+# Czech Republic
+# Thailand
+# Vietnam
+# Malaysia
+# Indonesia
+# Philippines
+# Japan
+
+#airscape/cityscape, rural, country

@@ -159,10 +159,17 @@ export default function ImageGallery() {
                     <ImageOff className="w-12 h-12 text-slate-600" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                  <p className="text-sm text-white/80">{currentImage.location}</p>
+                
+                <div className="absolute bottom-0 left-0 right-0 p-4 text-white flex justify-between items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-white/90 truncate">
+                    {currentImage.title || currentImage.location}
+                  </p>
+                  <p className="text-xs text-white/70 truncate">
+                    {currentImage.location}
+                  </p>
                 </div>
+
+
               </motion.div>
             </AnimatePresence>
 
