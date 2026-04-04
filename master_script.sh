@@ -264,26 +264,64 @@ log "Pricing cache cron job configured (monthly)"
 
 log "Setting up photo gallery"
 
+# Force repo to latest (ensures images.json is up‑to‑date)
+cd "$REPO_DIR"
+git fetch origin main
+git reset --hard origin/main
+
 # Create images directory
 mkdir -p "${DATA_DIR}/images"
 
 # Copy images from repo root/images to data directory
 if [ -d "$REPO_DIR/images" ]; then
-    cp -rf "$REPO_DIR/images/"* "${DATA_DIR}/images/"
-    if [ $? -eq 0 ]; then
-        log "Images copied successfully"
+    IMG_COUNT=$(find "$REPO_DIR/images" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) | wc -l)
+    log "Found ${IMG_COUNT} images in repo"
+    
+    if [ ${IMG_COUNT} -gt 0 ]; then
+        rsync -av --delete "${REPO_DIR}/images/" "${DATA_DIR}/images/" >> /var/log/image-sync.log 2>&1
+        if [ $? -eq 0 ]; then
+            log "Successfully copied ${IMG_COUNT} images"
+        else
+            log "ERROR: rsync failed, falling back to cp"
+            cp -rf "$REPO_DIR/images/"* "${DATA_DIR}/images/"
+        fi
     else
-        log "ERROR: Failed to copy images from $REPO_DIR/images"
+        log "WARNING: images directory exists but contains no image files"
     fi
 else
-    log "WARNING: Images directory not found in repo"
+    log "ERROR: images directory not found in repo"
+    # Create placeholder
+    cat > "${DATA_DIR}/images/placeholder.svg" << 'SVG'
+<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>
+  <rect width='200' height='200' fill='#ccc'/>
+  <text x='50%' y='50%' text-anchor='middle' dy='.3em' fill='#333'>No images</text>
+</svg>
+SVG
 fi
 
-# Copy images.json from repo (contains accurate location data)
+# Copy images.json from repo (with validation)
 if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
     if [ $? -eq 0 ]; then
         log "images.json copied from repo"
+        # Validate JSON
+        if jq empty "${DATA_DIR}/images.json" 2>/dev/null; then
+            # Verify it contains the expected first image filename
+            FIRST_FILENAME=$(jq -r '.[0].filename' "${DATA_DIR}/images.json" 2>/dev/null)
+            if [[ "$FIRST_FILENAME" =~ ^[0-9]+-.*\.(jpg|jpeg|png|webp|avif)$ ]]; then
+                log "images.json is valid and contains expected filename: $FIRST_FILENAME"
+            else
+                log "ERROR: images.json does not contain expected numbered filename (got '$FIRST_FILENAME')"
+                # Retry once: fetch again and copy
+                cd "$REPO_DIR"
+                git fetch origin main
+                git reset --hard origin/main
+                cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
+                log "Retried copy of images.json"
+            fi
+        else
+            log "ERROR: images.json is invalid JSON"
+        fi
     else
         log "ERROR: Failed to copy images.json"
     fi
@@ -294,6 +332,14 @@ fi
 # Set proper permissions
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
+
+# Final verification
+if [ -d "${DATA_DIR}/images" ] && [ "$(ls -A ${DATA_DIR}/images 2>/dev/null)" ]; then
+    FINAL_COUNT=$(find "${DATA_DIR}/images" -type f | wc -l)
+    log "VERIFICATION: ${FINAL_COUNT} image files available"
+else
+    log "ERROR: No images found after copy attempt"
+fi
 
 # -------------------------------
 # Metadata
@@ -1272,11 +1318,17 @@ server {
         alias ${DATA_DIR}/;
         add_header Access-Control-Allow-Origin *;
         add_header Cache-Control "no-store";
+        
+        # Explicit MIME types for all image formats and JSON
         types {
             image/webp webp;
             image/jpeg jpg jpeg;
             image/png png;
+            image/gif gif;
+            image/svg+xml svg;
+            application/json json;
         }
+        default_type application/octet-stream;
     }
     
     location / {
@@ -1349,7 +1401,7 @@ fi
 touch "$LOCK_FILE"
 trap "rm -f \"$LOCK_FILE\"" EXIT
 
-echo "[DEPLOY] Checking for updates..." >> /var/log/dashboard-deploy.log
+echo "[DEPLOY] $(date): Checking for updates..." >> /var/log/dashboard-deploy.log
 
 cd "$REPO_DIR" || exit 0
 chown -R appuser:appuser "$REPO_DIR"
@@ -1361,11 +1413,12 @@ LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "$LOCAL")
 
 if [ "$LOCAL" != "$REMOTE" ]; then
-  echo "[DEPLOY] Changes detected, deploying..." >> /var/log/dashboard-deploy.log
+  echo "[DEPLOY] $(date): Changes detected, deploying..." >> /var/log/dashboard-deploy.log
 
   git pull || exit 1
   cd "$REPO_DIR/dashboard" || exit 1
 
+  # Update pricing script
   if [ -f "$REPO_DIR/scripts/fetch_pricing.py" ]; then
     cp -f "$REPO_DIR/scripts/fetch_pricing.py" /opt/scripts/fetch_pricing.py
     chmod +x /opt/scripts/fetch_pricing.py
@@ -1373,21 +1426,70 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     /opt/scripts/fetch_pricing.py
   fi
 
-  # Copy images
+  # =============================================
+  # Robust image sync (same logic as main script)
+  # =============================================
+  mkdir -p "$DATA_DIR/images"
+  
   if [ -d "$REPO_DIR/images" ]; then
-    cp -rf "$REPO_DIR/images/"* "$DATA_DIR/images/"
-    echo "[DEPLOY] Images copied" >> /var/log/dashboard-deploy.log
+    # Count images before copy
+    IMG_COUNT=$(find "$REPO_DIR/images" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) | wc -l)
+    echo "[DEPLOY] Found ${IMG_COUNT} images in repo" >> /var/log/dashboard-deploy.log
+    
+    if [ ${IMG_COUNT} -gt 0 ]; then
+      # Use rsync for efficient sync (preserves metadata, only new/changed)
+      if command -v rsync >/dev/null 2>&1; then
+        rsync -av --delete "$REPO_DIR/images/" "$DATA_DIR/images/" >> /var/log/image-sync.log 2>&1
+        if [ $? -eq 0 ]; then
+          echo "[DEPLOY] Successfully synced ${IMG_COUNT} images" >> /var/log/dashboard-deploy.log
+        else
+          echo "[DEPLOY] ERROR: rsync failed, falling back to cp" >> /var/log/dashboard-deploy.log
+          cp -rf "$REPO_DIR/images/"* "$DATA_DIR/images/"
+        fi
+      else
+        cp -rf "$REPO_DIR/images/"* "$DATA_DIR/images/"
+        echo "[DEPLOY] Used cp (rsync not installed)" >> /var/log/dashboard-deploy.log
+      fi
+    else
+      echo "[DEPLOY] WARNING: images directory exists but contains no image files" >> /var/log/dashboard-deploy.log
+    fi
+  else
+    echo "[DEPLOY] WARNING: No images directory in repo" >> /var/log/dashboard-deploy.log
+    # Create a placeholder to avoid 404s
+    cat > "$DATA_DIR/images/placeholder.svg" << 'SVG'
+<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>
+  <rect width='200' height='200' fill='#ccc'/>
+  <text x='50%' y='50%' text-anchor='middle' dy='.3em' fill='#333'>No images</text>
+</svg>
+SVG
   fi
 
   # Copy images.json
   if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "$DATA_DIR/images.json"
-    echo "[DEPLOY] images.json copied" >> /var/log/dashboard-deploy.log
+    # Validate JSON
+    if jq empty "$DATA_DIR/images.json" 2>/dev/null; then
+      echo "[DEPLOY] images.json copied and valid" >> /var/log/dashboard-deploy.log
+    else
+      echo "[DEPLOY] ERROR: images.json is invalid JSON" >> /var/log/dashboard-deploy.log
+    fi
+  else
+    echo "[DEPLOY] WARNING: images.json not found in repo root" >> /var/log/dashboard-deploy.log
   fi
 
+  # Set permissions
   chown -R appuser:appuser "$DATA_DIR/images" 2>/dev/null || true
   chmod -R 755 "$DATA_DIR/images" 2>/dev/null || true
 
+  # Final verification
+  if [ -d "$DATA_DIR/images" ] && [ "$(ls -A $DATA_DIR/images 2>/dev/null)" ]; then
+    FINAL_COUNT=$(find "$DATA_DIR/images" -type f | wc -l)
+    echo "[DEPLOY] VERIFICATION: ${FINAL_COUNT} image files available" >> /var/log/dashboard-deploy.log
+  else
+    echo "[DEPLOY] ERROR: No images found after copy attempt" >> /var/log/dashboard-deploy.log
+  fi
+
+  # Build dashboard
   if ! npm ci 2>/dev/null; then
     npm install || exit 1
   fi
@@ -1398,10 +1500,13 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     cp -r dist "$TMP_DIR"
     rm -rf "$APP_DIR"/*
     cp -r "$TMP_DIR"/* "$APP_DIR"/
-    echo "[DEPLOY] Deployment complete" >> /var/log/dashboard-deploy.log
+    echo "[DEPLOY] $(date): Deployment complete" >> /var/log/dashboard-deploy.log
+  else
+    echo "[DEPLOY] ERROR: Build failed – dist missing" >> /var/log/dashboard-deploy.log
+    exit 1
   fi
 else
-  echo "[DEPLOY] No changes" >> /var/log/dashboard-deploy.log
+  echo "[DEPLOY] $(date): No changes" >> /var/log/dashboard-deploy.log
 fi
 DEPLOY_SCRIPT
 

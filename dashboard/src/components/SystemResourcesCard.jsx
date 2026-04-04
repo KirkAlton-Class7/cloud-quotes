@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { HardDrive, MemoryStick, Link2, FileCode, Activity, CheckCircle, Copy, ExternalLink, Cpu, Gauge } from "lucide-react";
 import { useState, useEffect } from "react";
-import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
+import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Card from "./Card";
 
 export default function SystemResourcesCard({ resources }) {
@@ -79,8 +79,116 @@ export default function SystemResourcesCard({ resources }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3 }}
     >
-      <Card title="System Resources" subtitle="Memory, disk, CPU, and monitoring endpoints">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Card title="System Resources" subtitle="CPU, memory, disk, and monitoring endpoints">
+        {/* CPU Section with Live Chart - MOVED TO TOP */}
+        <div className="mb-6">
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Left: CPU Details */}
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-3">
+                <Cpu className="w-5 h-5 text-amber-400" />
+                <h3 className="text-sm font-semibold text-slate-200">CPU</h3>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">Current Usage</span>
+                  <span className="text-white font-mono">{cpu.usage}%</span>
+                </div>
+                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-amber-500 to-red-500 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${cpu.usage}%` }}
+                    transition={{ duration: 0.8 }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+                {cpu.cores && (
+                  <div className="flex justify-start gap-4 text-xs text-slate-400 mt-2">
+                    <span>Cores: {cpu.cores}</span>
+                    {cpu.frequency && <span>Frequency: {cpu.frequency}</span>}
+                  </div>
+                )}
+                {cpu.loadAvg && (
+                  <div className="text-xs text-slate-400">
+                    Load (1min): {cpu.loadAvg}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Live CPU Chart with units and interval */}
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-4 h-4 text-cyan-400" />
+                  <h4 className="text-xs font-semibold text-slate-300">Live CPU Trend</h4>
+                </div>
+                <span className="text-[10px] text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded-full">
+                  every 10s
+                </span>
+              </div>
+              <div className="h-24">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: '#64748b', fontSize: 8 }}
+                      axisLine={{ stroke: '#334155' }}
+                      tickLine={{ stroke: '#334155' }}
+                      interval="preserveStartEnd"
+                      tickFormatter={(value, index) => {
+                        // Show only every 4th tick to avoid crowding
+                        if (index % 4 === 0) return value;
+                        return '';
+                      }}
+                    />
+                    <YAxis
+                      tick={{ fill: '#64748b', fontSize: 8 }}
+                      axisLine={{ stroke: '#334155' }}
+                      tickLine={{ stroke: '#334155' }}
+                      domain={[0, 100]}
+                      label={{
+                        value: 'CPU (%)',
+                        angle: -90,
+                        position: 'insideLeft',
+                        fill: '#94a3b8',
+                        fontSize: 10,
+                        dy: 20,
+                      }}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '10px' }}
+                      labelStyle={{ color: '#94a3b8' }}
+                      formatter={(value) => [`${value}%`, 'CPU']}
+                      labelFormatter={(label) => `Time: ${label}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#06b6d4"
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                <span>Now ←</span>
+                <span>{cpuHistory.length} readings (10s interval)</span>
+                <span>{cpuHistory.length > 0 ? cpuHistory[0]?.time : 'ago'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Memory & Disk Section (grid below CPU) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
           {/* Memory Section */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -137,81 +245,6 @@ export default function SystemResourcesCard({ resources }) {
                   animate={{ width: `${diskPercent}%` }}
                   transition={{ duration: 0.8 }}
                 />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* CPU Section with Live Chart */}
-        <div className="mt-6 pt-4 border-t border-white/10">
-          <div className="flex flex-col md:flex-row gap-6">
-            {/* Left: CPU Details */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <Cpu className="w-5 h-5 text-amber-400" />
-                <h3 className="text-sm font-semibold text-slate-200">CPU</h3>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Current Usage</span>
-                  <span className="text-white font-mono">{cpu.usage}%</span>
-                </div>
-                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-amber-500 to-red-500 rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${cpu.usage}%` }}
-                    transition={{ duration: 0.8 }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>0%</span>
-                  <span>50%</span>
-                  <span>100%</span>
-                </div>
-                {cpu.cores && (
-                  <div className="flex justify-start gap-4 text-xs text-slate-400 mt-2">
-                    <span>Cores: {cpu.cores}</span>
-                    {cpu.frequency && <span>Frequency: {cpu.frequency}</span>}
-                  </div>
-                )}
-                {cpu.loadAvg && (
-                  <div className="text-xs text-slate-400">
-                    Load (1min): {cpu.loadAvg}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right: Live CPU Chart */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <Gauge className="w-4 h-4 text-cyan-400" />
-                <h4 className="text-xs font-semibold text-slate-300">Live CPU Trend (last 20 readings)</h4>
-              </div>
-              <div className="h-24">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '10px' }}
-                      labelStyle={{ color: '#94a3b8' }}
-                      formatter={(value) => [`${value}%`, 'CPU']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#06b6d4"
-                      strokeWidth={2}
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                <span>Now</span>
-                <span>{cpuHistory.length} readings</span>
-                <span>{cpuHistory.length > 0 ? cpuHistory[0]?.time : 'ago'}</span>
               </div>
             </div>
           </div>
