@@ -40,6 +40,9 @@ APP_DIR="/var/www/${APP_NAME}"
 NGINX_SITE="/etc/nginx/sites-available/${APP_NAME}"
 DATA_DIR="${APP_DIR}/data"
 
+# Web servers (nginx, www-data) need +x on directories to traverse
+chmod 755 "${DATA_DIR}"
+
 # -------------------------------
 # Environment Setup
 # -------------------------------
