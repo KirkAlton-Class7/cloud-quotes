@@ -739,7 +739,7 @@ data = {
         {"label": "CPU", "value": f"{os.environ.get('CPU_USAGE', '0')}%", "status": status(os.environ.get('CPU_USAGE', '0'))},
         {"label": "Memory", "value": f"{os.environ.get('MEM_PERCENT', '0')}%", "status": status(os.environ.get('MEM_PERCENT', '0'))},
         {"label": "Disk", "value": os.environ.get('DISK_PERCENT', '0%'), "status": status(os.environ.get('DISK_PERCENT', '0').replace('%', ''))},
-        {"label": "Cost", "value": get_cumulative_cost(), "status": "info"}
+        {"label": "Estimated Cost", "value": get_cumulative_cost(), "status": "info"}
     ],
     "vmInformation": [
         {"label": "Hostname", "value": os.environ.get('HOSTNAME_VM', 'unknown')},
@@ -983,7 +983,7 @@ summaryCards = [
     {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
     {"label": "Memory", "value": f"{mem_percent}%", "status": status(mem_percent)},
     {"label": "Disk", "value": disk_percent, "status": status(disk_percent.replace('%', ''))},
-    {"label": "Cost", "value": get_cumulative_cost(), "status": "info"}
+    {"label": "Estimated Cost", "value": get_cumulative_cost(), "status": "info"}
 ]
 
 services = [
