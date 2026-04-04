@@ -270,10 +270,11 @@ cd "$REPO_DIR" || { log "ERROR: $REPO_DIR not found"; exit 1; }
 git fetch origin main
 git reset --hard origin/main
 
-# Create target directories
+# Create target directories and clear old images
 mkdir -p "${DATA_DIR}/images"
+rm -rf "${DATA_DIR}/images"/* 2>/dev/null || true
 
-# Copy images.json (exactly as manual commands)
+# Copy images.json
 if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
     log "images.json copied"
@@ -281,27 +282,19 @@ else
     log "ERROR: images.json not found in repo root"
 fi
 
-# Copy all images (using cp -rf, the same as manual)
+# Copy all images (cp -rf works reliably when run as root)
 if [ -d "$REPO_DIR/images" ]; then
     cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
-    log "Images copied (cp -rf)"
+    log "Images copied"
 else
     log "ERROR: images directory not found in repo"
 fi
 
-# Set permissions exactly as manual commands
+# Set ownership and permissions
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
 chmod 644 "${DATA_DIR}/images.json" 2>/dev/null || true
-
-# Verify the first image exists
-FIRST_IMG=$(jq -r '.[0].filename' "${DATA_DIR}/images.json" 2>/dev/null)
-if [ -n "$FIRST_IMG" ] && [ -f "${DATA_DIR}/images/$FIRST_IMG" ]; then
-    log "VERIFICATION: First image '$FIRST_IMG' exists."
-else
-    log "WARNING: First image '$FIRST_IMG' not found. Check repo content."
-fi
 
 # Reload nginx
 systemctl reload nginx
@@ -1269,7 +1262,7 @@ systemctl stop nginx || true
 rm -f /etc/nginx/sites-enabled/*
 rm -f /etc/nginx/sites-available/default
 
-# Create our site config
+# Create Nginx site config
 cat > "${NGINX_SITE}" <<EOF
 server {
     listen 80 default_server;
