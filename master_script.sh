@@ -273,33 +273,7 @@ git reset --hard origin/main
 # Create target directories
 mkdir -p "${DATA_DIR}/images"
 
-# Copy images – using a loop to avoid glob problems
-if [ -d "$REPO_DIR/images" ]; then
-    # Count images (any extension)
-    shopt -s nullglob
-    image_files=("$REPO_DIR/images"/*.{jpg,jpeg,png,webp,gif,avif})
-    shopt -u nullglob
-    IMG_COUNT=${#image_files[@]}
-    log "Found ${IMG_COUNT} images in repo"
-    
-    if [ ${IMG_COUNT} -gt 0 ]; then
-        # Copy each file individually
-        for f in "${image_files[@]}"; do
-            cp -f "$f" "${DATA_DIR}/images/"
-        done
-        if [ $? -eq 0 ]; then
-            log "Successfully copied ${IMG_COUNT} images"
-        else
-            log "ERROR: Failed to copy some images"
-        fi
-    else
-        log "WARNING: No image files found in $REPO_DIR/images"
-    fi
-else
-    log "ERROR: images directory not found in repo"
-fi
-
-# Copy images.json
+# Copy images.json (exactly as manual commands)
 if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
     log "images.json copied"
@@ -307,25 +281,29 @@ else
     log "ERROR: images.json not found in repo root"
 fi
 
-# Set permissions exactly as you did manually
+# Copy all images (using cp -rf, the same as manual)
+if [ -d "$REPO_DIR/images" ]; then
+    cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
+    log "Images copied (cp -rf)"
+else
+    log "ERROR: images directory not found in repo"
+fi
+
+# Set permissions exactly as manual commands
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
 chmod 644 "${DATA_DIR}/images.json" 2>/dev/null || true
 
-# Verify that the copy succeeded
-if [ -f "${DATA_DIR}/images.json" ] && [ -s "${DATA_DIR}/images.json" ]; then
-    FIRST_IMG=$(jq -r '.[0].filename' "${DATA_DIR}/images.json" 2>/dev/null)
-    if [ -f "${DATA_DIR}/images/$FIRST_IMG" ]; then
-        log "VERIFICATION: First image '$FIRST_IMG' exists and is accessible."
-    else
-        log "WARNING: First image '$FIRST_IMG' missing from images directory."
-    fi
+# Verify the first image exists
+FIRST_IMG=$(jq -r '.[0].filename' "${DATA_DIR}/images.json" 2>/dev/null)
+if [ -n "$FIRST_IMG" ] && [ -f "${DATA_DIR}/images/$FIRST_IMG" ]; then
+    log "VERIFICATION: First image '$FIRST_IMG' exists."
 else
-    log "ERROR: images.json missing or empty after copy."
+    log "WARNING: First image '$FIRST_IMG' not found. Check repo content."
 fi
 
-# Reload nginx to ensure fresh serving
+# Reload nginx
 systemctl reload nginx
 
 # -------------------------------
