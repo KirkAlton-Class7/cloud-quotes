@@ -314,31 +314,10 @@ git checkout main
 git pull origin main
 git reset --hard origin/main
 
-# Wait for the file system to settle
-sleep 2
-
-# Wait up to 10 seconds for images.json to appear (retry loop)
-for i in {1..10}; do
-    if [ -f "$REPO_DIR/images.json" ]; then
-        log "images.json found in repo after ${i} seconds"
-        break
-    fi
-    sleep 1
-done
-
 mkdir -p "${DATA_DIR}/images"
 rm -rf "${DATA_DIR}/images"/* 2>/dev/null || true
 
-# Copy images.json – force copy, log if missing
-if [ -f "$REPO_DIR/images.json" ]; then
-    cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
-    log "images.json copied from repo"
-else
-    log "ERROR: images.json still missing after waiting – check repo content"
-    # Optional: exit 1 here if you want the script to fail
-fi
-
-# Copy image files
+# Copy image files from repo (always do this)
 if [ -d "$REPO_DIR/images" ]; then
     cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
     log "Images copied from repo/images"
@@ -346,92 +325,56 @@ else
     log "ERROR: images directory not found in repo"
 fi
 
+# Generate images.json dynamically from the actual image files on the VM
+# (This is the reliable method that made the old script work)
+python3 << 'PYTHON_JSON_GEN'
+import json, os, re
+
+data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
+img_dir = os.path.join(data_dir, 'images')
+if not os.path.isdir(img_dir):
+    print("ERROR: images directory missing, cannot generate images.json")
+    exit(1)
+
+images = []
+extensions = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
+for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
+    if not fname.lower().endswith(extensions):
+        continue
+    base = fname.rsplit('.', 1)[0]
+    if re.match(r'^\d+-', base):
+        base = re.sub(r'^\d+-', '', base)
+    title = base.replace('_', ' ').title()
+    parts = base.split('-')
+    if len(parts) >= 2:
+        country = parts[0].replace('_', ' ').title()
+        city = ' '.join(parts[1:]).replace('_', ' ').title()
+        location = f"{city}, {country}"
+    else:
+        location = title
+    images.append({
+        "id": idx,
+        "filename": fname,
+        "title": title,
+        "location": location,
+        "photographer": "VM Gallery",
+        "tags": ["travel", "nature"]
+    })
+output_file = os.path.join(data_dir, 'images.json')
+with open(output_file, 'w') as f:
+    json.dump(images, f, indent=2)
+print(f"Generated images.json with {len(images)} images")
+PYTHON_JSON_GEN
+
+log "images.json generated from image files"
+
 # Set permissions (nginx needs +x on directories)
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
-chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
-chmod 644 "${DATA_DIR}/images.json" 2>/dev/null || true
 chmod 755 "${DATA_DIR}" 2>/dev/null || true
 
 systemctl reload nginx || true
 
-# # ------------------------------------------------------------
-# # Copy images.json from repo, or generate if missing
-# # ------------------------------------------------------------
-# if [ -f "$REPO_DIR/images.json" ]; then
-#     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
-#     log "images.json copied from repo"
-# else
-#     log "WARNING: images.json not found in repo root – generating from image files"
-#     # Generate images.json dynamically from the actual image files in the repo
-#     python3 << 'PYTHON_JSON_GEN'
-# import json, os, re
-
-# repo_images_dir = os.environ.get('REPO_DIR', '/opt/vm-dashboard') + '/images'
-# data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
-# if not os.path.isdir(repo_images_dir):
-#     print("ERROR: images directory not found, cannot generate images.json")
-#     exit(1)
-
-# files = sorted([f for f in os.listdir(repo_images_dir) if f.lower().endswith(('.jpg','.jpeg','.png','.webp','.avif'))])
-# images = []
-# for idx, fname in enumerate(files, 1):
-#     base = fname.rsplit('.', 1)[0]
-#     if re.match(r'^\d+-', base):
-#         base = re.sub(r'^\d+-', '', base)
-#     title = base.replace('_', ' ').title()
-#     parts = base.split('-')
-#     if len(parts) >= 2:
-#         country = parts[0].replace('_', ' ').title()
-#         city = ' '.join(parts[1:]).replace('_', ' ').title()
-#         location = f"{city}, {country}"
-#     else:
-#         location = title
-#     images.append({
-#         "id": idx,
-#         "filename": fname,
-#         "title": title,
-#         "location": location,
-#         "photographer": "VM Gallery",
-#         "tags": ["travel", "nature"]
-#     })
-# output_file = os.path.join(data_dir, 'images.json')
-# with open(output_file, 'w') as f:
-#     json.dump(images, f, indent=2)
-# print(f"Generated images.json with {len(images)} images")
-# PYTHON_JSON_GEN
-#     log "images.json generated from image files"
-# fi
-
-# # ------------------------------------------------------------
-# # Copy image files from repo to data directory
-# # ------------------------------------------------------------
-# if [ -d "$REPO_DIR/images" ]; then
-#     cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
-#     log "Images copied from repo/images"
-# else
-#     log "ERROR: images directory not found in repo"
-#     # Create a placeholder to avoid 404s
-#     cat > "${DATA_DIR}/images/placeholder.svg" << 'SVG'
-# <svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>
-#   <rect width='200' height='200' fill='#ccc'/>
-#   <text x='50%' y='50%' text-anchor='middle' dy='.3em' fill='#333'>No images</text>
-# </svg>
-# SVG
-# fi
-
-# # ------------------------------------------------------------
-# # Set permissions (web server needs +x on directories)
-# # ------------------------------------------------------------
-# chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
-# chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
-# chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
-# chmod 644 "${DATA_DIR}/images.json" 2>/dev/null || true
-
-# # Ensure the data directory itself is traversable by nginx
-# chmod 755 "${DATA_DIR}" 2>/dev/null || true
-
-# systemctl reload nginx || true
 
 # -------------------------------
 # System metrics (generic)
