@@ -1126,8 +1126,12 @@ fi
 log "Startup complete"
 
 # ----------------------------------------------------------------------
-# FINAL SAFETY COPY – Guarantee images.json is present (manual fix)
+# Copy images.json (final unconditional)
 # ----------------------------------------------------------------------
+# NOTE: RACE CONDITION 
+# The repo's images.json might not be present during the initial copy
+# due to git operation delays. This unconditional copy guarantees
+# the file is placed after all builds complete.
 if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
     chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json"
