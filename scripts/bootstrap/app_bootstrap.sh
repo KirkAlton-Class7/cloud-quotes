@@ -40,9 +40,6 @@ APP_DIR="/var/www/${APP_NAME}"
 NGINX_SITE="/etc/nginx/sites-available/${APP_NAME}"
 DATA_DIR="${APP_DIR}/data"
 
-# Web servers (nginx, www-data) need +x on directories to traverse
-chmod 755 "${DATA_DIR}"
-
 # -------------------------------
 # Environment Setup
 # -------------------------------
@@ -317,18 +314,28 @@ git checkout main
 git pull origin main
 git reset --hard origin/main
 
-# Wait a moment for the filesystem to settle
-sleep 1
+# Wait for the file system to settle
+sleep 2
+
+# Wait up to 10 seconds for images.json to appear (retry loop)
+for i in {1..10}; do
+    if [ -f "$REPO_DIR/images.json" ]; then
+        log "images.json found in repo after ${i} seconds"
+        break
+    fi
+    sleep 1
+done
 
 mkdir -p "${DATA_DIR}/images"
 rm -rf "${DATA_DIR}/images"/* 2>/dev/null || true
 
-# Copy images.json – force copy if exists, else log error
+# Copy images.json – force copy, log if missing
 if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
     log "images.json copied from repo"
 else
-    log "ERROR: images.json not found in repo root"
+    log "ERROR: images.json still missing after waiting – check repo content"
+    # Optional: exit 1 here if you want the script to fail
 fi
 
 # Copy image files
@@ -339,7 +346,7 @@ else
     log "ERROR: images directory not found in repo"
 fi
 
-# Set permissions
+# Set permissions (nginx needs +x on directories)
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
