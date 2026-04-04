@@ -265,64 +265,68 @@ log "Pricing cache cron job configured (monthly)"
 
 log "Setting up photo gallery"
 
-# Force repo to latest (ensures images.json is up‑to‑date)
-cd "$REPO_DIR"
+# Ensure repo is up to date
+cd "$REPO_DIR" || { log "ERROR: $REPO_DIR not found"; exit 1; }
 git fetch origin main
 git reset --hard origin/main
 
-# Create images directory
+# Create target directories
 mkdir -p "${DATA_DIR}/images"
 
-# Copy images from repo (using cp for simplicity and reliability)
+# Copy images – using a loop to avoid glob problems
 if [ -d "$REPO_DIR/images" ]; then
-    IMG_COUNT=$(find "$REPO_DIR/images" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) | wc -l)
+    # Count images (any extension)
+    shopt -s nullglob
+    image_files=("$REPO_DIR/images"/*.{jpg,jpeg,png,webp,gif,avif})
+    shopt -u nullglob
+    IMG_COUNT=${#image_files[@]}
     log "Found ${IMG_COUNT} images in repo"
     
     if [ ${IMG_COUNT} -gt 0 ]; then
-        cp -rf "$REPO_DIR/images/"* "${DATA_DIR}/images/"
+        # Copy each file individually
+        for f in "${image_files[@]}"; do
+            cp -f "$f" "${DATA_DIR}/images/"
+        done
         if [ $? -eq 0 ]; then
             log "Successfully copied ${IMG_COUNT} images"
         else
-            log "ERROR: Failed to copy images"
+            log "ERROR: Failed to copy some images"
         fi
     else
-        log "WARNING: images directory exists but contains no image files"
+        log "WARNING: No image files found in $REPO_DIR/images"
     fi
 else
     log "ERROR: images directory not found in repo"
 fi
 
-# Copy images.json from repo (force overwrite)
+# Copy images.json
 if [ -f "$REPO_DIR/images.json" ]; then
     cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
-    if [ $? -eq 0 ]; then
-        log "images.json copied from repo"
-        # Validate JSON
-        if jq empty "${DATA_DIR}/images.json" 2>/dev/null; then
-            log "images.json is valid JSON"
-        else
-            log "ERROR: images.json is invalid JSON"
-        fi
-    else
-        log "ERROR: Failed to copy images.json"
-    fi
+    log "images.json copied"
 else
-    log "WARNING: images.json not found in repo root"
+    log "ERROR: images.json not found in repo root"
 fi
 
-# Set proper permissions
+# Set permissions exactly as you did manually
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
 chmod 644 "${DATA_DIR}/images.json" 2>/dev/null || true
 
-# Final verification
-if [ -d "${DATA_DIR}/images" ] && [ "$(ls -A ${DATA_DIR}/images 2>/dev/null)" ]; then
-    FINAL_COUNT=$(find "${DATA_DIR}/images" -type f | wc -l)
-    log "VERIFICATION: ${FINAL_COUNT} image files available"
+# Verify that the copy succeeded
+if [ -f "${DATA_DIR}/images.json" ] && [ -s "${DATA_DIR}/images.json" ]; then
+    FIRST_IMG=$(jq -r '.[0].filename' "${DATA_DIR}/images.json" 2>/dev/null)
+    if [ -f "${DATA_DIR}/images/$FIRST_IMG" ]; then
+        log "VERIFICATION: First image '$FIRST_IMG' exists and is accessible."
+    else
+        log "WARNING: First image '$FIRST_IMG' missing from images directory."
+    fi
 else
-    log "ERROR: No images found after copy attempt"
+    log "ERROR: images.json missing or empty after copy."
 fi
+
+# Reload nginx to ensure fresh serving
+systemctl reload nginx
 
 # -------------------------------
 # Metadata
