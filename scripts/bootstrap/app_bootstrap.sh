@@ -307,8 +307,6 @@ log "Setting up pricing cache cron job"
 log "Setting up photo gallery"
 
 cd "$REPO_DIR" || { log "ERROR: $REPO_DIR not found"; exit 1; }
-
-# Ensure we are on main branch with the latest commit
 git fetch origin
 git checkout main
 git pull origin main
@@ -317,7 +315,7 @@ git reset --hard origin/main
 mkdir -p "${DATA_DIR}/images"
 rm -rf "${DATA_DIR}/images"/* 2>/dev/null || true
 
-# Copy image files from repo (always do this)
+# Copy image files only (no images.json here)
 if [ -d "$REPO_DIR/images" ]; then
     cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
     log "Images copied from repo/images"
@@ -325,50 +323,16 @@ else
     log "ERROR: images directory not found in repo"
 fi
 
-# Generate images.json dynamically from the actual image files on the VM
-# (This is the reliable method that made the old script work)
-python3 << 'PYTHON_JSON_GEN'
-import json, os, re
+# Set permissions for images directory
+chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
+chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
+chmod 755 "${DATA_DIR}" 2>/dev/null || true
 
-data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
-img_dir = os.path.join(data_dir, 'images')
-if not os.path.isdir(img_dir):
-    print("ERROR: images directory missing, cannot generate images.json")
-    exit(1)
+systemctl reload nginx || true
 
-images = []
-extensions = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
-for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
-    if not fname.lower().endswith(extensions):
-        continue
-    base = fname.rsplit('.', 1)[0]
-    if re.match(r'^\d+-', base):
-        base = re.sub(r'^\d+-', '', base)
-    title = base.replace('_', ' ').title()
-    parts = base.split('-')
-    if len(parts) >= 2:
-        country = parts[0].replace('_', ' ').title()
-        city = ' '.join(parts[1:]).replace('_', ' ').title()
-        location = f"{city}, {country}"
-    else:
-        location = title
-    images.append({
-        "id": idx,
-        "filename": fname,
-        "title": title,
-        "location": location,
-        "photographer": "VM Gallery",
-        "tags": ["travel", "nature"]
-    })
-output_file = os.path.join(data_dir, 'images.json')
-with open(output_file, 'w') as f:
-    json.dump(images, f, indent=2)
-print(f"Generated images.json with {len(images)} images")
-PYTHON_JSON_GEN
-
-log "images.json generated from image files"
-
+# ----------------------------------------------------------------------
 # Set permissions (nginx needs +x on directories)
+# ----------------------------------------------------------------------
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
 chmod 755 "${DATA_DIR}" 2>/dev/null || true
@@ -1160,6 +1124,18 @@ else
 fi
 
 log "Startup complete"
+
+# ----------------------------------------------------------------------
+# FINAL SAFETY COPY – Guarantee images.json is present (manual fix)
+# ----------------------------------------------------------------------
+if [ -f "$REPO_DIR/images.json" ]; then
+    cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
+    chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json"
+    chmod 644 "${DATA_DIR}/images.json"
+    log "Final safety copy of images.json applied"
+else
+    log "ERROR: images.json not found in repo at final stage"
+fi
 
 # -------------------------------
 # Auto-Deploy Dashboard Updates

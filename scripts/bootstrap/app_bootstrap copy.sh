@@ -40,9 +40,6 @@ APP_DIR="/var/www/${APP_NAME}"
 NGINX_SITE="/etc/nginx/sites-available/${APP_NAME}"
 DATA_DIR="${APP_DIR}/data"
 
-# Web servers (nginx, www-data) need +x on directories to traverse
-chmod 755 "${DATA_DIR}"
-
 # -------------------------------
 # Environment Setup
 # -------------------------------
@@ -320,27 +317,30 @@ git reset --hard origin/main
 mkdir -p "${DATA_DIR}/images"
 rm -rf "${DATA_DIR}/images"/* 2>/dev/null || true
 
-# ------------------------------------------------------------
-# Copy images.json from repo, or generate if missing
-# ------------------------------------------------------------
-if [ -f "$REPO_DIR/images.json" ]; then
-    cp -f "$REPO_DIR/images.json" "${DATA_DIR}/images.json"
-    log "images.json copied from repo"
+# Copy image files from repo (always do this)
+if [ -d "$REPO_DIR/images" ]; then
+    cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
+    log "Images copied from repo/images"
 else
-    log "WARNING: images.json not found in repo root – generating from image files"
-    # Generate images.json dynamically from the actual image files in the repo
-    python3 << 'PYTHON_JSON_GEN'
+    log "ERROR: images directory not found in repo"
+fi
+
+# Generate images.json dynamically from the actual image files on the VM
+# (This is the reliable method that made the old script work)
+python3 << 'PYTHON_JSON_GEN'
 import json, os, re
 
-repo_images_dir = os.environ.get('REPO_DIR', '/opt/vm-dashboard') + '/images'
 data_dir = os.environ.get('DATA_DIR', '/var/www/vm-dashboard/data')
-if not os.path.isdir(repo_images_dir):
-    print("ERROR: images directory not found, cannot generate images.json")
+img_dir = os.path.join(data_dir, 'images')
+if not os.path.isdir(img_dir):
+    print("ERROR: images directory missing, cannot generate images.json")
     exit(1)
 
-files = sorted([f for f in os.listdir(repo_images_dir) if f.lower().endswith(('.jpg','.jpeg','.png','.webp','.avif'))])
 images = []
-for idx, fname in enumerate(files, 1):
+extensions = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
+for idx, fname in enumerate(sorted(os.listdir(img_dir)), start=1):
+    if not fname.lower().endswith(extensions):
+        continue
     base = fname.rsplit('.', 1)[0]
     if re.match(r'^\d+-', base):
         base = re.sub(r'^\d+-', '', base)
@@ -365,38 +365,16 @@ with open(output_file, 'w') as f:
     json.dump(images, f, indent=2)
 print(f"Generated images.json with {len(images)} images")
 PYTHON_JSON_GEN
-    log "images.json generated from image files"
-fi
 
-# ------------------------------------------------------------
-# Copy image files from repo to data directory
-# ------------------------------------------------------------
-if [ -d "$REPO_DIR/images" ]; then
-    cp -rf "$REPO_DIR/images/." "${DATA_DIR}/images/"
-    log "Images copied from repo/images"
-else
-    log "ERROR: images directory not found in repo"
-    # Create a placeholder to avoid 404s
-    cat > "${DATA_DIR}/images/placeholder.svg" << 'SVG'
-<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>
-  <rect width='200' height='200' fill='#ccc'/>
-  <text x='50%' y='50%' text-anchor='middle' dy='.3em' fill='#333'>No images</text>
-</svg>
-SVG
-fi
+log "images.json generated from image files"
 
-# ------------------------------------------------------------
-# Set permissions (web server needs +x on directories)
-# ------------------------------------------------------------
+# Set permissions (nginx needs +x on directories)
 chown -R ${APP_USER}:${APP_USER} "${DATA_DIR}/images" 2>/dev/null || true
 chmod -R 755 "${DATA_DIR}/images" 2>/dev/null || true
-chown ${APP_USER}:${APP_USER} "${DATA_DIR}/images.json" 2>/dev/null || true
-chmod 644 "${DATA_DIR}/images.json" 2>/dev/null || true
-
-# Ensure the data directory itself is traversable by nginx
 chmod 755 "${DATA_DIR}" 2>/dev/null || true
 
 systemctl reload nginx || true
+
 
 # -------------------------------
 # System metrics (generic)
@@ -739,7 +717,7 @@ data = {
         {"label": "CPU", "value": f"{os.environ.get('CPU_USAGE', '0')}%", "status": status(os.environ.get('CPU_USAGE', '0'))},
         {"label": "Memory", "value": f"{os.environ.get('MEM_PERCENT', '0')}%", "status": status(os.environ.get('MEM_PERCENT', '0'))},
         {"label": "Disk", "value": os.environ.get('DISK_PERCENT', '0%'), "status": status(os.environ.get('DISK_PERCENT', '0').replace('%', ''))},
-        {"label": "Cost", "value": get_cumulative_cost(), "status": "info"}
+        {"label": "Estimated Cost", "value": get_cumulative_cost(), "status": "info"}
     ],
     "vmInformation": [
         {"label": "Hostname", "value": os.environ.get('HOSTNAME_VM', 'unknown')},
@@ -983,7 +961,7 @@ summaryCards = [
     {"label": "CPU", "value": f"{cpu_usage}%", "status": status(cpu_usage)},
     {"label": "Memory", "value": f"{mem_percent}%", "status": status(mem_percent)},
     {"label": "Disk", "value": disk_percent, "status": status(disk_percent.replace('%', ''))},
-    {"label": "Cost", "value": get_cumulative_cost(), "status": "info"}
+    {"label": "Estimated Cost", "value": get_cumulative_cost(), "status": "info"}
 ]
 
 services = [
