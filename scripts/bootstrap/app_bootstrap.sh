@@ -1098,26 +1098,12 @@ data = {
     "systemResources": systemResources
 }
 
-        "appName": os.environ.get('DASHBOARD_APP_NAME', 'DevSecOps'),
-        "tagline": os.environ.get('DASHBOARD_TAGLINE', 'Real-time infrastructure monitoring'),
-        "dashboardUser": os.environ.get('DASHBOARD_USER', 'Kirk Alton'),
-        "dashboardName": os.environ.get('DASHBOARD_NAME', 'DevSecOps Dashboard'),
-        "uptime": uptime_str
-    }),
-    "quote": random.choice(quotes),
-    "logs": logs,
-    "resourceTable": resourceTable,
-    "systemLoad": systemLoad,
-    "identity": identity,
-    "network": network,
-    "location": location,
-    "systemResources": systemResources
-}
-
 with open(DASHBOARD_JSON, "w") as f:
     json.dump(data, f, indent=2)
 
 print(f"Dashboard data refreshed - CPU: {cpu_usage}%, Memory: {mem_percent}%, Disk: {disk_percent}")
+EOF
+
 
 chmod +x /opt/refresh-dashboard-data.py
 
@@ -1125,54 +1111,6 @@ REFRESH_CRON_CMD="*/5 * * * * /usr/bin/python3 /opt/refresh-dashboard-data.py >>
 (crontab -l 2>/dev/null | grep -v 'refresh-dashboard-data'; echo "$REFRESH_CRON_CMD") | crontab -
 
 log "Dashboard refresh cron job configured (every 5 minutes)"
-
-# -------------------------------
-# Ensure index.html Exists
-# -------------------------------
-if [ ! -f "${APP_DIR}/index.html" ]; then
-  log "Creating fallback index.html"
-  echo "<h1>Dashboard initializing...</h1>" > "${APP_DIR}/index.html"
-fi
-
-# -------------------------------
-# Nginx Configuration
-# -------------------------------
-log "Configuring nginx"
-systemctl stop nginx || true
-
-rm -f /etc/nginx/sites-enabled/*
-rm -f /etc/nginx/sites-available/default
-
-cat > "${NGINX_SITE}" <<EOF
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
-    
-    root ${APP_DIR};
-    index index.html;
-    
-    location /data/ {
-        alias ${DATA_DIR}/;
-        add_header Access-Control-Allow-Origin *;
-        add_header Cache-Control "no-store";
-        
-        types {
-            image/webp webp;
-            image/jpeg jpg jpeg;
-            image/png png;
-            image/gif gif;
-            image/svg+xml svg;
-            application/json json;
-        }
-        default_type application/octet-stream;
-    }
-    
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-}
-EOF
 
 ln -sf "${NGINX_SITE}" /etc/nginx/sites-enabled/${APP_NAME}
 nginx -t || { log "ERROR: nginx config invalid"; exit 1; }
